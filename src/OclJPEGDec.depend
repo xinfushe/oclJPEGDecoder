@@ -1,0 +1,11 @@
+# depslib dependency file v1.0
+1432958598 source:c:\users\kiro\documents\ocljpegdec\main.cpp
+	<stdio.h>
+	<stdlib.h>
+	<stdint.h>
+	<math.h>
+	<time.h>
+	<string.h>
+	<assert.h>
+	<utility>
+
