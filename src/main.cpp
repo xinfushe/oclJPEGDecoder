@@ -12,34 +12,7 @@
 using namespace std;
 
 // jpeg structure definition
-#pragma pack(1)
-struct APP0
-{
-    uint16_t len;
-    uint8_t id[5]; // JFIF\0
-    uint16_t ver; // typically 0x0102
-    uint8_t res_unit;
-    uint16_t res_x;
-    uint16_t res_y;
-    uint8_t thumbnail_width;
-    uint8_t thumbnail_height;
-    uint8_t thumbnail_data[0][3];
-};
-
-struct DQT
-{
-    uint16_t len;
-
-};
-#pragma pack()
-
-struct JPG_DATA
-{
-    APP0 app0;
-    void *quantization_table[4];
-    void *huffman_table[16];
-    void *thumbnail;
-};
+#include "jpeg.h"
 
 uint16_t inline bswap(const uint16_t x)
 {
@@ -143,6 +116,24 @@ bool read_dqt(JPG_DATA &jpg, FILE * const strm, size_t len)
     return true;
 }
 
+bool read_sof(JPG_DATA &jpg, FILE * const strm, size_t len)
+{
+    if (len!=sizeof(SOF0) || 1!=fread(&jpg.frame_info,sizeof(SOF0),1,strm))
+    {
+        puts("[X] SOF0 is corrupted.");
+        return false;
+    }else if (jpg.frame_info.num_channels!=3 || jpg.frame_info.bit_depth!=8)
+    {
+        puts("[X] Unsupported Encoding");
+        return false;
+    }else
+    {
+        printf("Dimensions: %u px * %u px\n",jpg.frame_info.img_width,jpg.frame_info.img_height);
+        printf("Bit Depth: %u\n",jpg.frame_info.bit_depth);
+        return true;
+
+    }
+}
 bool read_dht(JPG_DATA &jpg, FILE * const strm, size_t len)
 {
     uint16_t word;
@@ -151,18 +142,99 @@ bool read_dht(JPG_DATA &jpg, FILE * const strm, size_t len)
     {
         fread(&byte,sizeof(byte),1,strm);
         const uint8_t type=byte>>4; // 0:DC 1:AC
-        const uint8_t id=byte&0xF;
-        if (jpg.huffman_table[id]!=nullptr)
-        {
-            printf("[X] Huffman table #%u is already defined.\n",id);
-            return false;
-        }
+        const uint8_t id=byte&0x1F; // combine type and id
         if (type!=1 && type!=0)
         {
             printf("[X] Invalid Type for Huffman Table #%u.\n",id);
             return false;
         }
-        len-=0+1;
+        if (jpg.huffman_table[id]!=nullptr)
+        {
+            printf("[X] Huffman table #%u is already defined.\n",id);
+            return false;
+        }
+        // allocate memory for huffman table
+        jpg.huffman_table[id]=new HUFFMAN_TABLE;
+        HUFFMAN_TABLE *tbl=jpg.huffman_table[id];
+        tbl->num_codeword=0; // initialization
+
+        uint8_t countByLength[16];
+        if (1!=fread(&countByLength,sizeof(countByLength),1,strm))
+        {
+datacorrupted:
+            printf("[X] Data of Huffman Table #%u is corrupted.\n",id);
+            return false;
+        }
+        if (countByLength[0]>0)
+        {
+            // unusal
+invalidtree:
+            printf("[X] Huffman Table #%u is invalid.\n",id);
+            return false;
+        }
+        printf("[ ] Huffman Table #%u Data:",id);
+        for (int i=1;i<=16;i++)
+        {
+            printf(" %02x",countByLength[i-1]);
+            assert(countByLength[i-1]<=(1<<i));
+            tbl->num_codeword+=countByLength[i-1];
+        }
+        puts("");
+        if (tbl->num_codeword>256)
+            goto invalidtree;
+        else if (tbl->num_codeword>0)
+        {
+            // read weights
+            if (1!=fread(&tbl->value,tbl->num_codeword,1,strm))
+                goto datacorrupted;
+
+            char curCodeWord[20]={'0',0};
+            int curCodeWordLen=1;
+            // the first codeword must be zeroes
+            while (countByLength[curCodeWordLen-1]==0)
+                curCodeWord[curCodeWordLen++]='0';
+            --countByLength[curCodeWordLen-1];
+
+            printf("Codeword %s Value %d\n",curCodeWord,tbl->value[0]);
+            // generate other codewords
+            for (int n=1;n<tbl->num_codeword;n++)
+            {
+                // inc codeword
+                int i;
+                for (i=curCodeWordLen-1;i>=0;i--)
+                {
+                    if (++curCodeWord[i]=='1')
+                        break;
+                    else
+                        curCodeWord[i]='0';
+                }
+                if (i<0) goto invalidtree;
+                if (!countByLength[curCodeWordLen-1])
+                {
+                    // inc length
+                    do
+                    {
+                        curCodeWord[curCodeWordLen]='0';
+                        curCodeWord[curCodeWordLen+1]=0;
+                    }while (++curCodeWordLen<=16 && countByLength[curCodeWordLen-1]==0);
+                    if (curCodeWordLen>=16) goto invalidtree;
+                }
+                --countByLength[curCodeWordLen-1];
+                strcpy(tbl->codeword[n],curCodeWord);
+                printf("Codeword %s Value %d\n",curCodeWord,tbl->value[n]);
+            }
+            if (countByLength[curCodeWordLen-1])
+            {
+                goto invalidtree;
+            }
+        }
+        if (len>=16+tbl->num_codeword+1)
+            len-=16+tbl->num_codeword+1;
+        else
+        {
+            puts("[X] DQT is corrupted.");
+            return false;
+        }
         printf("[ ] Got Huffman Table #%u (Type:%s)\n",id,type?"AC":"DC");
     }
     return true;
@@ -220,8 +292,14 @@ bool processJpgFile(const char *filePath)
                 goto error;
             }
             break;
+        case 0xC0: // SOF
+            if (!read_sof(jpg,fp,len))
+            {
+                puts("[X] read_sof() failed");
+                goto error;
+            }
+            break;
         case 0xC4: // DHT
-            goto error;
             if (!read_dht(jpg,fp,len))
             {
                 puts("[X] read_dht() failed");
@@ -251,7 +329,10 @@ int main(int argc, char **argv)
     {
         printf("Processing %s\n",argv[i]);
         processJpgFile(argv[i]);
-        if (i+1<argc) system("pause");
+        if (i+1<argc)
+        {
+            system("pause");
+        }
     }
     return 0;
 }
