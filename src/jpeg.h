@@ -39,6 +39,16 @@ struct SOS
     uint8_t reserved[3]; // 0x00, 0x3F, 0x00
 };
 
+#pragma pack()
+
+// Application-Defined Structres
+struct HUFFMAN_TABLE
+{
+    int num_codeword;
+    char codeword[256][20]; // max length of a codeword is 16
+    uint8_t value[256];
+};
+
 enum SAMPLING_TYPE
 {
     YUV444,
@@ -46,15 +56,6 @@ enum SAMPLING_TYPE
     YUV422_H1V2,
     YUV420,
     UNKNOWN
-};
-#pragma pack()
-
-// Application Structres
-struct HUFFMAN_TABLE
-{
-    int num_codeword;
-    char codeword[256][20]; // max length of a codeword is 16
-    uint8_t value[256];
 };
 
 struct JPG_DATA

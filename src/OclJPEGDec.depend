@@ -9,7 +9,7 @@
 	<assert.h>
 	<utility>
 
-1433337726 source:c:\users\kiro\documents\ocljpegdecoder\src\main.cpp
+1433346210 source:c:\users\kiro\documents\ocljpegdecoder\src\main.cpp
 	<stdio.h>
 	<stdlib.h>
 	<stdint.h>
@@ -17,8 +17,14 @@
 	<time.h>
 	<string.h>
 	<assert.h>
-	<utility>
-	"jpeg.h"
 
-1433336875 c:\users\kiro\documents\ocljpegdecoder\src\jpeg.h
+1433346183 c:\users\kiro\documents\ocljpegdecoder\src\jpeg.h
+
+1433346236 source:c:\users\kiro\documents\ocljpegdecoder\src\parser.cpp
+	<stdio.h>
+	<errno.h>
+	<stdint.h>
+	<string.h>
+	<assert.h>
+	"jpeg.h"
 

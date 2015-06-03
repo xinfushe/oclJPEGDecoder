@@ -11,7 +11,7 @@
 				<Option object_output="obj/Debug/" />
 				<Option type="1" />
 				<Option compiler="gcc" />
-				<Option parameters='&quot;C:\Users\Kiro\Pictures\opo0432d.jpg&quot;' />
+				<Option parameters='&quot;..\test\JPEG_example_JPG_RIP_050.jpg&quot;' />
 				<Compiler>
 					<Add option="-g" />
 				</Compiler>
@@ -34,7 +34,12 @@
 			<Add option="-Wall" />
 			<Add option="-fexceptions" />
 		</Compiler>
+		<Unit filename="decoder.cpp" />
+		<Unit filename="huffman.cpp" />
+		<Unit filename="jpeg.h" />
 		<Unit filename="main.cpp" />
+		<Unit filename="oclDCT8x8.cpp" />
+		<Unit filename="parser.cpp" />
 		<Extensions>
 			<code_completion />
 			<debugger />
