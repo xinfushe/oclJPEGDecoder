@@ -19,6 +19,23 @@ uint16_t inline bswap(const uint16_t x)
     return (x>>8)|(x<<8);
 }
 
+SAMPLING_TYPE getSamplingType(uint16_t sampling_factor)
+{
+    switch (sampling_factor)
+    {
+    case 0x11:
+        return YUV444;
+    case 0x21:
+        return YUV422_H2V1;
+    case 0x12:
+        return YUV422_H1V2;
+    case 0x22:
+        return YUV420;
+    default:
+        return UNKNOWN;
+    }
+}
+
 bool read_soi(JPG_DATA &jpg, FILE * const strm)
 {
     uint8_t tag[2];
@@ -128,14 +145,19 @@ bool read_sof(JPG_DATA &jpg, FILE * const strm, size_t len)
         return false;
     }else
     {
+        // fix endianess
+        jpg.frame_info.img_width=bswap(jpg.frame_info.img_width);
+        jpg.frame_info.img_height=bswap(jpg.frame_info.img_height);
+
         printf("Dimensions: %u px * %u px\n",jpg.frame_info.img_width,jpg.frame_info.img_height);
         printf("Bit Depth: %u\n",jpg.frame_info.bit_depth);
         for (uint8_t i=0;i<jpg.frame_info.num_channels;i++)
         {
-            printf("Channel #%u: id=%u, subsampling=%u*%u, uses quantization table %u\n",i, \
+            printf("Channel #%u: id=%u, sampling=%u*%u (%d), uses quantization table %u\n",i, \
                    jpg.frame_info.channel_info[i].id, \
                    jpg.frame_info.channel_info[i].sampling_factor>>4, \
                    jpg.frame_info.channel_info[i].sampling_factor&0xF, \
+                   getSamplingType(jpg.frame_info.channel_info[i].sampling_factor),
                    jpg.frame_info.channel_info[i].quant_tbl_id);
         }
         return true;

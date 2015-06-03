@@ -23,7 +23,7 @@ struct SOF0
     struct
     {
         uint8_t id;
-        uint8_t sampling_factor;
+        uint8_t sampling_factor; // bit 0~3: vertical; bit 4~7: horizontal
         uint8_t quant_tbl_id;
     }channel_info[3];
 };
@@ -34,9 +34,18 @@ struct SOS
     struct
     {
         uint8_t id;
-        uint8_t huff_tbl_id;
+        uint8_t huff_tbl_id; // bit 0~3: AC; bit 4~7: DC
     }channel_data[3];
     uint8_t reserved[3]; // 0x00, 0x3F, 0x00
+};
+
+enum SAMPLING_TYPE
+{
+    YUV444,
+    YUV422_H2V1,
+    YUV422_H1V2,
+    YUV420,
+    UNKNOWN
 };
 #pragma pack()
 
