@@ -124,16 +124,48 @@ bool read_sof(JPG_DATA &jpg, FILE * const strm, size_t len)
         return false;
     }else if (jpg.frame_info.num_channels!=3 || jpg.frame_info.bit_depth!=8)
     {
-        puts("[X] Unsupported Encoding");
+        puts("[X] Unsupported Sampling");
         return false;
     }else
     {
         printf("Dimensions: %u px * %u px\n",jpg.frame_info.img_width,jpg.frame_info.img_height);
         printf("Bit Depth: %u\n",jpg.frame_info.bit_depth);
+        for (uint8_t i=0;i<jpg.frame_info.num_channels;i++)
+        {
+            printf("Channel #%u: id=%u, subsampling=%u*%u, uses quantization table %u\n",i, \
+                   jpg.frame_info.channel_info[i].id, \
+                   jpg.frame_info.channel_info[i].sampling_factor>>4, \
+                   jpg.frame_info.channel_info[i].sampling_factor&0xF, \
+                   jpg.frame_info.channel_info[i].quant_tbl_id);
+        }
         return true;
-
     }
 }
+
+bool read_sos(JPG_DATA &jpg, FILE * const strm, size_t len)
+{
+    static const uint8_t reserved[3]={0,0x3F,0};
+    if (len!=sizeof(SOS) || 1!=fread(&jpg.scan_info,sizeof(SOS),1,strm) || memcmp(jpg.scan_info.reserved,reserved,3))
+    {
+        puts("[X] SOF0 is corrupted.");
+        return false;
+    }else if (jpg.scan_info.num_channels!=3)
+    {
+        puts("[X] Unsupported Sampling");
+        return false;
+    }else
+    {
+        for (uint8_t i=0;i<jpg.scan_info.num_channels;i++)
+        {
+            printf("Channel #%u: id=%u, uses huffman table AC%u DC%u\n",i, \
+                   jpg.scan_info.channel_data[i].id, \
+                   jpg.scan_info.channel_data[i].huff_tbl_id>>4, \
+                   jpg.scan_info.channel_data[i].huff_tbl_id&0xF);
+        }
+        return true;
+    }
+}
+
 bool read_dht(JPG_DATA &jpg, FILE * const strm, size_t len)
 {
     uint16_t word;
@@ -165,13 +197,7 @@ datacorrupted:
             printf("[X] Data of Huffman Table #%u is corrupted.\n",id);
             return false;
         }
-        if (countByLength[0]>0)
-        {
-            // unusal
-invalidtree:
-            printf("[X] Huffman Table #%u is invalid.\n",id);
-            return false;
-        }
+        assert(countByLength[0]==0); // true in most cases
         printf("[ ] Huffman Table #%u Data:",id);
         for (int i=1;i<=16;i++)
         {
@@ -181,7 +207,11 @@ invalidtree:
         }
         puts("");
         if (tbl->num_codeword>256)
-            goto invalidtree;
+        {
+invalidtree:
+            printf("[X] Huffman Table #%u is invalid.\n",id);
+            return false;
+        }
         else if (tbl->num_codeword>0)
         {
             // read weights
@@ -199,7 +229,7 @@ invalidtree:
             // generate other codewords
             for (int n=1;n<tbl->num_codeword;n++)
             {
-                // inc codeword
+                // next codeword (incremented by 1)
                 int i;
                 for (i=curCodeWordLen-1;i>=0;i--)
                 {
@@ -211,7 +241,7 @@ invalidtree:
                 if (i<0) goto invalidtree;
                 if (!countByLength[curCodeWordLen-1])
                 {
-                    // inc length
+                    // inc length (padding with 0)
                     do
                     {
                         curCodeWord[curCodeWordLen]='0';
@@ -223,13 +253,10 @@ invalidtree:
                 strcpy(tbl->codeword[n],curCodeWord);
                 printf("Codeword %s Value %d\n",curCodeWord,tbl->value[n]);
             }
-            if (countByLength[curCodeWordLen-1])
-            {
-                goto invalidtree;
-            }
+            assert(0==countByLength[curCodeWordLen-1]);
         }
-        if (len>=16+tbl->num_codeword+1)
-            len-=16+tbl->num_codeword+1;
+        if (len>=(size_t)16+tbl->num_codeword+1)
+            len-=(size_t)16+tbl->num_codeword+1;
         else
         {
             puts("[X] DQT is corrupted.");
@@ -292,17 +319,30 @@ bool processJpgFile(const char *filePath)
                 goto error;
             }
             break;
-        case 0xC0: // SOF
+        case 0xC0: // SOF0 (Baseline)
             if (!read_sof(jpg,fp,len))
             {
                 puts("[X] read_sof() failed");
                 goto error;
             }
             break;
+        case 0xC1:
+        case 0xC2: // Progressive
+        case 0xC3: // Lossless
+            puts("[X] Only Baseline Profile is Supported.");
+            goto error;
+            break;
         case 0xC4: // DHT
             if (!read_dht(jpg,fp,len))
             {
                 puts("[X] read_dht() failed");
+                goto error;
+            }
+            break;
+        case 0xDA: // SOS
+            if (!read_sos(jpg,fp,len))
+            {
+                puts("[X] read_sos() failed");
                 goto error;
             }
             break;

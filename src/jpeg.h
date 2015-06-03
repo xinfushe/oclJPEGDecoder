@@ -22,12 +22,22 @@ struct SOF0
     uint8_t num_channels;
     struct
     {
-        uint8_t channel_id;
-        uint8_t scale_factor;
+        uint8_t id;
+        uint8_t sampling_factor;
         uint8_t quant_tbl_id;
     }channel_info[3];
 };
 
+struct SOS
+{
+    uint8_t num_channels;
+    struct
+    {
+        uint8_t id;
+        uint8_t huff_tbl_id;
+    }channel_data[3];
+    uint8_t reserved[3]; // 0x00, 0x3F, 0x00
+};
 #pragma pack()
 
 // Application Structres
@@ -45,4 +55,5 @@ struct JPG_DATA
     SOF0 frame_info;
     HUFFMAN_TABLE *huffman_table[32];
     void *thumbnail;
+    SOS scan_info;
 };
