@@ -61,7 +61,7 @@ enum SAMPLING_TYPE
 struct JPG_DATA
 {
     APP0 app0;
-    void *quantization_table[4];
+    int *quantization_table[4];
     SOF0 frame_info;
     HUFFMAN_TABLE *huffman_table[32];
     void *thumbnail;

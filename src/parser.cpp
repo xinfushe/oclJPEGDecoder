@@ -89,10 +89,10 @@ bool read_dqt(JPG_DATA &jpg, FILE * const strm, size_t len)
             printf("[X] Invalid Precision Value for Quantization Table #%u.\n",id);
             return false;
         }
+        jpg.quantization_table[id]=new int[64];
         switch (prec)
         {
         case 0: // 8-bit
-            jpg.quantization_table[id]=new uint8_t[64];
             if (1!=fread(jpg.quantization_table[id],sizeof(uint8_t[64]),1,strm))
             {
                 printf("[X] Quantization Table #%u is corrupted.\n",id);
@@ -100,7 +100,6 @@ bool read_dqt(JPG_DATA &jpg, FILE * const strm, size_t len)
             }
             break;
         case 1: // 16-bit
-            jpg.quantization_table[id]=new uint16_t[64];
             for (size_t i=0;i<64;i++)
             {
                 if (1!=fread(&word,sizeof(uint16_t),1,strm))
