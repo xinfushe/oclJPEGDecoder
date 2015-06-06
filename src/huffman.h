@@ -26,6 +26,12 @@ public:
         return mChildren[idx];
     }
 
+    NodeType* operator [](const int idx) const
+    {
+        assert(idx>=0 && idx<ary);
+        return mChildren[idx];
+    }
+
     const NodeType& getChildren(const int idx) const
     {
         // must be a not-null child
@@ -39,7 +45,7 @@ public:
         assert(!isLeaf());
 
         if (mChildren[idx]!=NULL)
-            return mChildren[idx];
+            return *mChildren[idx];
         else
         {
             ++mNumChildren;
@@ -75,10 +81,28 @@ public:
         return mData;
     }
 
+    operator const DataTp& () const
+    {
+        return getData();
+    }
+
     void setData(const DataTp& data)
     {
         assert(isLeaf());
         mData=data;
+    }
+
+    size_t getCodeLength() const
+    {
+        assert(isLeaf());
+        return mCodeLength;
+    }
+
+    void setCode(const char * code, const size_t len)
+    {
+        assert(isLeaf());
+        mCode=code;
+        mCodeLength=len;
     }
 
     // advanced features
@@ -90,6 +114,8 @@ private:
     const NodeType * const mParent;
     DataTp mData;
 
+    const char* mCode;
+    size_t mCodeLength;
     const long mID;
     static long NodeCount;
 };
@@ -117,13 +143,20 @@ public:
 
     void addCode(const char * hcode, const size_t hlen, const DataType& hval);
 
-    const NodeType* findCode(void * const bitstream) const;
+    const NodeType* findCode(BitStream& strm) const;
 
     const DataType& operator [](const char * hcode) const
     {
         // construct a temporary bitstream
+        BitStream tmp((uint8_t*)hcode,strlen(hcode));
+        return findCode(tmp)->getData();
     }
 
+    // advanced
+    void traverse(const long firstID = 0, const bool preOrder = true) const
+    {
+        mRoot.traverse(firstID-1,preOrder);
+    }
 private:
     NodeType mRoot;
 

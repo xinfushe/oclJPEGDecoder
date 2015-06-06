@@ -41,3 +41,45 @@
 
 1433556778 c:\users\kiro\documents\ocljpegdecoder\src\huffman.h
 
+1433503022 source:c:\users\daryl\documents\ocljpegdecoder-master\src\decoder.cpp
+
+1433584948 source:c:\users\daryl\documents\ocljpegdecoder-master\src\main.cpp
+	<stdio.h>
+	<stdlib.h>
+	<stdint.h>
+	<math.h>
+	<time.h>
+	<string.h>
+	<assert.h>
+
+1433503022 source:c:\users\daryl\documents\ocljpegdecoder-master\src\ocldct8x8.cpp
+
+1433503022 source:c:\users\daryl\documents\ocljpegdecoder-master\src\parser.cpp
+	<stdio.h>
+	<errno.h>
+	<stdint.h>
+	<string.h>
+	<assert.h>
+	"jpeg.h"
+
+1433503022 c:\users\daryl\documents\ocljpegdecoder-master\src\jpeg.h
+
+1433596156 source:c:\users\daryl\documents\ocljpegdecoder-master\src\huffman.cpp
+	<stdio.h>
+	<stdint.h>
+	<string.h>
+	<assert.h>
+	"bitstream.h"
+	"huffman.h"
+
+1433596243 c:\users\daryl\documents\ocljpegdecoder-master\src\huffman.h
+
+1433596023 c:\users\daryl\documents\ocljpegdecoder-master\src\bitstream.h
+
+1433596290 source:c:\users\daryl\documents\ocljpegdecoder-master\src\bitstream.cpp
+	<stdio.h>
+	<stdint.h>
+	<string.h>
+	<assert.h>
+	"bitstream.h"
+
