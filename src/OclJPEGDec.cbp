@@ -36,6 +36,7 @@
 		</Compiler>
 		<Unit filename="decoder.cpp" />
 		<Unit filename="huffman.cpp" />
+		<Unit filename="huffman.h" />
 		<Unit filename="jpeg.h" />
 		<Unit filename="main.cpp" />
 		<Unit filename="oclDCT8x8.cpp" />

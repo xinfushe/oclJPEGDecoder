@@ -7,13 +7,16 @@ class HuffmanTreeNode
 public:
     typedef HuffmanTreeNode<ary, DataTp> NodeType, SelfType;
 
-    HuffmanTreeNode(const NodeType * parent):mID(++NodeCount)
+    HuffmanTreeNode(const NodeType * parent):mParent(parent),mID(++NodeCount)
     {
-        static_assert(ary>=2 && ary<=16 && (ary&(ary-1))==0, "Template argument Ary must be power of 2.");
-        this->mParent = parent;
-        this->mNumChildren = 0;
-        for (int i=0;i<ary;i++)
-            this->mChildren[i] = NULL;
+        mNumChildren = 0;
+    }
+
+    HuffmanTreeNode(const NodeType * parent, const DataTp& data):mParent(parent),mID(++NodeCount)
+    {
+        assert(parent!=NULL);
+        mNumChildren = -1;
+        mData = data;
     }
 
     // access to children
@@ -26,25 +29,38 @@ public:
     const NodeType& getChildren(const int idx) const
     {
         // must be a not-null child
-        assert(idx>=0 && idx<mNumChildren && mChildren[idx]!=NULL);
+        assert(idx>=0 && idx<ary && mChildren[idx]!=NULL);
         return *mChildren[idx];
     }
 
     NodeType& createSubTree(const int idx)
     {
-        assert(idx>=mNumChildren && idx<ary && mChildren[idx]==NULL);
-        return mChildren[idx]=new NodeType(this);
+        assert(idx>=0 && idx<ary && mChildren[idx]==NULL);
+        assert(!isLeaf());
+
+        if (mChildren[idx]!=NULL)
+            return mChildren[idx];
+        else
+        {
+            ++mNumChildren;
+            assert(mNumChildren<=ary);
+            return *(mChildren[idx]=new NodeType(this));
+        }
     }
 
-    NodeType& createLeaf(const int idx)
+    NodeType& createLeaf(const int idx, const DataTp& data)
     {
-        assert(idx>=mNumChildren && idx<ary && mChildren[idx]==NULL);
-        return mChildren[idx]=new NodeType(this);
+        assert(idx>=0 && idx<ary && mChildren[idx]==NULL);
+        assert(!isLeaf());
+
+        ++mNumChildren;
+        assert(mNumChildren<=ary);
+        return *(mChildren[idx]=new NodeType(this, data));
     }
 
     bool isLeaf() const
     {
-        return mNumChildren==0;
+        return mNumChildren==-1;
     }
 
     bool isRoot() const
@@ -55,13 +71,13 @@ public:
     // access to data
     const DataTp& getData() const
     {
-        assert(mNumChildren==0);
+        assert(isLeaf());
         return mData;
     }
 
     void setData(const DataTp& data)
     {
-        assert(mNumChildren==0);
+        assert(isLeaf());
         mData=data;
     }
 
@@ -69,9 +85,9 @@ public:
     long traverse(long lastID = -1, const bool preOrder = true) const;
 
 private:
-    NodeType *mChildren[ary];
+    NodeType *mChildren[ary]={NULL};
     int mNumChildren;
-    const NodeType * mParent;
+    const NodeType * const mParent;
     DataTp mData;
 
     const long mID;

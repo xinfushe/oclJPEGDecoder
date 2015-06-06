@@ -25,5 +25,6 @@ HuffmanTree<a,T>::findCode(void * const bitstream) const
 bool test_build_huffman_tree(const char ** code_word, const size_t num)
 {
     const HuffmanTree<4,int> tree;
+    tree.
     return true;
 }
