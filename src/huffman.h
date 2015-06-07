@@ -149,8 +149,14 @@ public:
 
     const DataType& operator [](const char * hcode) const
     {
+        assert(hcode!=NULL);
+        const size_t len=strlen(hcode);
+        assert(len>0);
         // construct a temporary bitstream
-        BitStream tmp((uint8_t*)hcode,strlen(hcode));
+        BitStream tmp(((len-1)>>3)+1);
+        for (size_t i=0;i<len;i++)
+            tmp.writeBit(hcode[i]=='1');
+        tmp.rewind();
         return *findCode(tmp);
     }
 
@@ -165,5 +171,8 @@ private:
     HuffmanTree(const HuffmanTree&) = delete;
     HuffmanTree& operator = (const HuffmanTree&) = delete;
 };
+
+// unit tests
+bool test_huffman();
 
 #endif // HUFFMAN_H_INCLUDED

@@ -67,10 +67,10 @@ HuffmanTree<a,T>::findCode(BitStream& strm) const
 
     size_t totRead=0;
     const HuffmanTreeNode<a,T> *node=&mRoot;
-    while (!mRoot.isLeaf())
+    while (!node->isLeaf())
     {
         uint32_t buf=strm.nextBits(lg2);
-        assert((buf&(~(1<<lg2)))==0); // validate the result (verbose)
+        assert((buf&(~((1<<lg2)-1)))==0); // validate the result (verbose)
         totRead+=lg2;
         node=(*node)[buf];
         if (node==NULL) return NULL; // codeword not found
@@ -83,12 +83,14 @@ HuffmanTree<a,T>::findCode(BitStream& strm) const
     return node;
 }
 
-bool test_build_huffman_tree()
+bool test_huffman()
 {
     HuffmanTree<4,int> tree;
     tree.addCode("01",2,567);
     tree.addCode("100",3,123);
     tree.addCode("11111111",8,345);
-    printf("%d\n",tree["100"]);
+    assert(tree["100"]==123);
+    assert(tree["11111111"]==345);
+    assert(tree["01"]==567);
     return true;
 }

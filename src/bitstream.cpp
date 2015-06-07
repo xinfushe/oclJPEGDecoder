@@ -7,7 +7,20 @@
 
 size_t BitStream::append(const uint8_t * src, const size_t len)
 {
-    // TODO: implement
+    assert(src!=NULL && len>0);
+    const size_t minSize=fixPositionAndGetSize()+len;
+    if (minSize>mCapacity) // needs extra space
+    {
+        if (!reserve(minSize))
+            return 0; // unexpected error
+    }
+    if (mEndPos+len>mCapacity)
+    {
+        trim();
+    }
+    assert(mEndPos+len<=mCapacity);
+    memcpy(&mBitReservoir[mEndPos],src,len);
+    mEndPos+=len;
     return len;
 }
 

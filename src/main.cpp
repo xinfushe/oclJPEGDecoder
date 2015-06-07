@@ -7,10 +7,17 @@
 #include <string.h>
 #include <assert.h>
 
+#include "bitstream.h"
+#include "huffman.h"
+
 bool loadJPG(const char *filePath);
 
 int main(int argc, char **argv)
 {
+    // run unit tests
+    test_bitstream();
+    test_huffman();
+
     if (argc<=1)
     {
         printf("Usage: %s file1 [file2 file3 ...]\n",argv[0]);

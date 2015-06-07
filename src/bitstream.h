@@ -9,6 +9,12 @@ public:
         clear();
     }
 
+    BitStream(const size_t cap)
+    {
+        clear();
+        reserve(cap);
+    }
+
     BitStream(const uint8_t * data, const size_t len)
     {
         load(data,len);
@@ -81,7 +87,7 @@ public:
     }
 
     // adjust pointer when eof is reached
-    void fixPosition()
+    size_t fixPositionAndGetSize()
     {
         if (mBytePos>=mEndPos)
         {
@@ -89,6 +95,7 @@ public:
             mBytePos=mEndPos;
             mBitPos=0;
         }
+        return mEndPos-mBytePos;
     }
 
     void trim()
@@ -122,13 +129,13 @@ public:
     bool reserve(const size_t newCap)
     {
         assert(newCap>0);
-        fixPosition();
-        if (newCap>=mEndPos-mBytePos)
+        if (newCap>=fixPositionAndGetSize())
         {
             uint8_t * const oldMem=mBitReservoir;
             uint8_t * const newMem=new uint8_t[newCap]; // realloc
             moveDataTo(newMem); // move data with trimming
-            delete[] oldMem; // delete old buffer
+            mCapacity=newCap; // update capacity
+            if (oldMem) delete[] oldMem; // delete old buffer
             return true;
         }
         else
@@ -187,7 +194,7 @@ public:
     }
 
     // bit streaming
-    bool frontBool() const
+    bool frontBit() const
     {
         return mBitReservoir[mBytePos]&(1<<(7-mBitPos));
     }
@@ -197,15 +204,31 @@ public:
         return mBitReservoir[mBytePos];
     }
 
-    bool nextBool()
+    // write a bit to the current position (can overwrite)
+    void writeBit(bool b)
     {
-        bool ret=frontBool();
+        const uint8_t mask=1<<(7-mBitPos);
+        if (b)
+            mBitReservoir[mBytePos]|=mask;
+        else
+            mBitReservoir[mBytePos]&=~mask;
+        moveToNextBit();
+    }
+
+    bool nextBit()
+    {
+        bool ret=frontBit();
+        moveToNextBit();
+        return ret;
+    }
+
+    void moveToNextBit()
+    {
         if (++mBitPos==8)
         {
             mBitPos=0;
             mBytePos++;
         }
-        return ret;
     }
 
     // numBits <= 17
@@ -217,7 +240,7 @@ public:
         case 0:
             return 0;
         case 1:
-            return nextBool()?1:0;
+            return nextBit();
         case 2 ... 9: // gcc extenstion
             tmp=front9b(numBits);
             break;
@@ -246,6 +269,7 @@ public:
 
     const uint8_t * frontData() const
     {
+        // don't call me when eof is reached pls
         assert(!eof());
         return &mBitReservoir[mBytePos];
     }
@@ -279,8 +303,10 @@ private:
     void moveDataTo(uint8_t* newBuffer)
     {
         assert(newBuffer!=NULL);
-        fixPosition();
-        memcpy(newBuffer,frontData(),mEndPos-mBytePos);
+        if (fixPositionAndGetSize())
+        {
+            memcpy(newBuffer,frontData(),mEndPos-mBytePos);
+        }
         mEndPos-=mBytePos;
         mBytePos=0;
         mBitReservoir=newBuffer;
@@ -288,5 +314,8 @@ private:
         // and that mBitPos is not changed
     }
 };
+
+// unit tests
+bool test_bitstream();
 
 #endif // BITSTREAM_H_INCLUDED
