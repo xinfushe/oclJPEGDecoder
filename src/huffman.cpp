@@ -3,7 +3,6 @@
 #include <string.h>
 #include <assert.h>
 
-#include "bitstream.h"
 #include "huffman.h"
 
 template <int a, class T> long HuffmanTreeNode<a,T>::NodeCount = 0;

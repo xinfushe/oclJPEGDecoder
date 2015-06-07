@@ -1,6 +1,8 @@
 #ifndef HUFFMAN_H_INCLUDED
 #define HUFFMAN_H_INCLUDED
 
+#include "bitstream.h"
+
 template <int ary, typename DataTp>
 class HuffmanTreeNode
 {
@@ -149,7 +151,7 @@ public:
     {
         // construct a temporary bitstream
         BitStream tmp((uint8_t*)hcode,strlen(hcode));
-        return findCode(tmp)->getData();
+        return *findCode(tmp);
     }
 
     // advanced
