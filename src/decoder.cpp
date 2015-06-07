@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
-#include <assert.h>
 
+#include "macro.h"
 #include "jpeg.h"
 #include "bitstream.h"
 #include "huffman.h"
@@ -56,7 +56,15 @@ bool is_supported_file(JPG_DATA &jpg)
     }
     return true;
 }
+
 bool decode_huffman_data(JPG_DATA &jpg, FILE * const strm)
 {
+    // create huffman trees
+    HuffmanTree<4,uint8_t>* htree[32]={NULL};
+    for (uint8_t i=0;i<32;i++)
+    {
+        if (jpg.huffman_table[i]!=NULL)
+            htree[i]=new HuffmanTree<4,uint8_t>(jpg.huffman_table[i]->codeword,jpg.huffman_table[i]->value,jpg.huffman_table[i]->num_codeword);
+    }
     return false;
 }

@@ -1,32 +1,14 @@
 #include <stdio.h>
-#include <errno.h>
 #include <stdint.h>
 #include <string.h>
-#include <assert.h>
 
+#include "macro.h"
 #include "jpeg.h"
 #include "decoder.h"
 
 uint16_t inline bswap(const uint16_t x)
 {
     return (x>>8)|(x<<8);
-}
-
-SAMPLING_TYPE getSamplingType(uint16_t sampling_factor)
-{
-    switch (sampling_factor)
-    {
-    case 0x11:
-        return YUV444;
-    case 0x21:
-        return YUV422_H2V1;
-    case 0x12:
-        return YUV422_H1V2;
-    case 0x22:
-        return YUV420;
-    default:
-        return UNKNOWN;
-    }
 }
 
 bool read_soi(JPG_DATA &jpg, FILE * const strm)
@@ -145,11 +127,10 @@ bool read_sof(JPG_DATA &jpg, FILE * const strm, size_t len)
         printf("Bit Depth: %u\n",jpg.frame_info.bit_depth);
         for (uint8_t i=0;i<jpg.frame_info.num_channels;i++)
         {
-            printf("Channel #%u: id=%u, sampling=%u*%u (%d), uses quantization table %u\n",i, \
+            printf("Channel #%u: id=%u, sampling=%u*%u, uses quantization table %u\n",i, \
                    jpg.frame_info.channel_info[i].id, \
                    jpg.frame_info.channel_info[i].sampling_factor>>4, \
                    jpg.frame_info.channel_info[i].sampling_factor&0xF, \
-                   getSamplingType(jpg.frame_info.channel_info[i].sampling_factor),
                    jpg.frame_info.channel_info[i].quant_tbl_id);
         }
         return true;
@@ -238,7 +219,8 @@ invalidtree:
                 curCodeWord[curCodeWordLen++]='0';
             --countByLength[curCodeWordLen-1];
 
-            printf("Codeword %s Value %d\n",curCodeWord,tbl->value[0]);
+            tbl->codeword[0]=strcpy(new char[20],curCodeWord);
+            printf("Codeword %s Value %d\n",tbl->codeword[0],tbl->value[0]);
             // generate other codewords
             for (int n=1;n<tbl->num_codeword;n++)
             {
@@ -263,8 +245,9 @@ invalidtree:
                     if (curCodeWordLen>=16) goto invalidtree;
                 }
                 --countByLength[curCodeWordLen-1];
-                strcpy(tbl->codeword[n],curCodeWord);
-                printf("Codeword %s Value %d\n",curCodeWord,tbl->value[n]);
+
+                tbl->codeword[n]=strcpy(new char[20],curCodeWord);
+                printf("Codeword %s Value %d\n",tbl->codeword[n],tbl->value[n]);
             }
             assert(0==countByLength[curCodeWordLen-1]);
         }
@@ -280,12 +263,12 @@ invalidtree:
     return true;
 }
 
-bool loadJPG(const char *filePath)
+bool load_jpg(const char *filePath)
 {
     FILE * const fp=fopen(filePath,"rb");
     if (fp==NULL)
     {
-        printf("Couldn't open file. Error code %d.\n", errno);
+        printf("Couldn't open file.\n");
         return false;
     }
     // parse data

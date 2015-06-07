@@ -45,17 +45,8 @@ struct SOS
 struct HUFFMAN_TABLE
 {
     int num_codeword;
-    char codeword[256][20]; // max length of a codeword is 16
+    const char *codeword[256]; // at most 256 codewords
     uint8_t value[256];
-};
-
-enum SAMPLING_TYPE
-{
-    YUV444,
-    YUV422_H2V1,
-    YUV422_H1V2,
-    YUV420,
-    UNKNOWN
 };
 
 struct JPG_DATA

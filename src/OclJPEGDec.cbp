@@ -16,6 +16,28 @@
 					<Add option="-g" />
 				</Compiler>
 			</Target>
+			<Target title="DebugV">
+				<Option output="bin/Debug/OclJPEGDec" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/Debug/" />
+				<Option type="1" />
+				<Option compiler="gcc" />
+				<Option parameters='&quot;..\test\JPEG_example_JPG_RIP_050.jpg&quot;' />
+				<Compiler>
+					<Add option="-g" />
+					<Add option="-DVERBOSE" />
+				</Compiler>
+			</Target>
+			<Target title="BuildTest">
+				<Option output="bin/Debug/OclJPEGDec" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/Debug/" />
+				<Option type="1" />
+				<Option compiler="gcc" />
+				<Option parameters='&quot;..\test\JPEG_example_JPG_RIP_050.jpg&quot;' />
+				<Compiler>
+					<Add option="-g" />
+					<Add option="-DCOMPILE_ONLY" />
+				</Compiler>
+			</Target>
 			<Target title="Release">
 				<Option output="bin/Release/OclJPEGDec" prefix_auto="1" extension_auto="1" />
 				<Option object_output="obj/Release/" />
@@ -41,6 +63,7 @@
 		<Unit filename="huffman.cpp" />
 		<Unit filename="huffman.h" />
 		<Unit filename="jpeg.h" />
+		<Unit filename="macro.h" />
 		<Unit filename="main.cpp" />
 		<Unit filename="oclDCT8x8.cpp" />
 		<Unit filename="parser.cpp" />

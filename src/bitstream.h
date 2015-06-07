@@ -87,7 +87,7 @@ public:
     }
 
     // adjust pointer when eof is reached
-    size_t fixPositionAndGetSize()
+    size_t fixPosition()
     {
         if (mBytePos>=mEndPos)
         {
@@ -129,7 +129,7 @@ public:
     bool reserve(const size_t newCap)
     {
         assert(newCap>0);
-        if (newCap>=fixPositionAndGetSize())
+        if (newCap>=fixPosition())
         {
             uint8_t * const oldMem=mBitReservoir;
             uint8_t * const newMem=new uint8_t[newCap]; // realloc
@@ -235,6 +235,7 @@ public:
     uint32_t nextBits(const uint8_t numBits)
     {
         uint32_t tmp;
+        vassert(numBits<=17);
         switch (numBits)
         {
         case 0:
@@ -270,7 +271,7 @@ public:
     const uint8_t * frontData() const
     {
         // don't call me when eof is reached pls
-        assert(!eof());
+        vassert(!eof());
         return &mBitReservoir[mBytePos];
     }
 
@@ -302,8 +303,8 @@ private:
 
     void moveDataTo(uint8_t* newBuffer)
     {
-        assert(newBuffer!=NULL);
-        if (fixPositionAndGetSize())
+        vassert(newBuffer!=NULL);
+        if (fixPosition())
         {
             memcpy(newBuffer,frontData(),mEndPos-mBytePos);
         }
