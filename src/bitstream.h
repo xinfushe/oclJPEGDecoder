@@ -85,6 +85,7 @@ public:
     {
         if (mBytePos>=mEndPos)
         {
+            assert(mBytePos<=mCapacity);
             mBytePos=mEndPos;
             mBitPos=0;
         }
@@ -101,7 +102,6 @@ public:
             {
                 clear();
             }
-            // Note that mBitPos is not changed
         }
     }
 
@@ -284,7 +284,8 @@ private:
         mEndPos-=mBytePos;
         mBytePos=0;
         mBitReservoir=newBuffer;
-        // Note that the old buffer is not freed here.
+        // Note that the old buffer is not freed here
+        // and that mBitPos is not changed
     }
 };
 
