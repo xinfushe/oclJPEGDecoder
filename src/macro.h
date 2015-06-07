@@ -58,6 +58,8 @@ public:
 // e.g. TYPE_MAX(int)=0xFFFFFFFF
 #define TYPE_MAX(TP) BIT_MASK(TP,TYPE_BITS(TP))
 
+#define COUNT_OF(arr) (sizeof(arr)/sizeof(arr[0]))
+
 // Bit manipulation
 #define LOW_BIT(x) ((x)&(-(x)))
 #define RTRIM(x) ((x)/LOW_BIT(x))
@@ -82,3 +84,6 @@ inline T min(const T& x,const T& y) {return x<y?x:y;}
 
 template <typename T>
 inline T max(const T& x,const T& y) {return x>y?x:y;}
+
+template <typename T>
+inline T max(const T& x,const T& y,const T& z) {return max(max(x,y),z);}

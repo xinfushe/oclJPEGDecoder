@@ -7,7 +7,7 @@
 
 size_t BitStream::append(const uint8_t * src, const size_t len)
 {
-    assert(src!=NULL && len>0);
+    vassert(src!=NULL && len>0);
     const size_t minSize=fixPosition()+len;
     if (minSize>mCapacity) // needs extra space
     {

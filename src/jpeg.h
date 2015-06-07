@@ -57,4 +57,14 @@ struct JPG_DATA
     HUFFMAN_TABLE *huffman_table[32];
     void *thumbnail;
     SOS scan_info;
+
+    int mcu_width; // in pixels
+    int mcu_height; // in pixels
+    int mcu_count_w;
+    int mcu_count_h;
+    int num_mcu;
+
+    int yblks_per_mcu; // Y Color Component Blocks per MCU
+    int blks_per_mcu;
+
 };

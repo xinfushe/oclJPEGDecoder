@@ -20,6 +20,16 @@ public:
         load(data,len);
     }
 
+    // slow implementation
+    BitStream(const char * str)
+    {
+        vassert(str!=NULL);
+        clear();
+        reserve((strlen(str)+7)>>3);
+        for (;*str;str++) writeBit(*str=='1');
+        rewind();
+    }
+
     ~BitStream()
     {
         free();
@@ -33,6 +43,11 @@ public:
     size_t getEndPos() const
     {
         return mEndPos;
+    }
+
+    size_t getSize() const
+    {
+        return mEndPos-mBytePos;
     }
 
     uint8_t getBitPosition() const
@@ -86,18 +101,6 @@ public:
         }
     }
 
-    // adjust pointer when eof is reached
-    size_t fixPosition()
-    {
-        if (mBytePos>=mEndPos)
-        {
-            assert(mBytePos<=mCapacity);
-            mBytePos=mEndPos;
-            mBitPos=0;
-        }
-        return mEndPos-mBytePos;
-    }
-
     void trim()
     {
         if (mBytePos)
@@ -132,7 +135,7 @@ public:
         if (newCap>=fixPosition())
         {
             uint8_t * const oldMem=mBitReservoir;
-            uint8_t * const newMem=new uint8_t[newCap]; // realloc
+            uint8_t * const newMem=new uint8_t[newCap+4]; // realloc
             moveDataTo(newMem); // move data with trimming
             mCapacity=newCap; // update capacity
             if (oldMem) delete[] oldMem; // delete old buffer
@@ -166,11 +169,14 @@ public:
 
     void backBits(const uint8_t numBits)
     {
-        mBitPos-=numBits;
-        if (mBitPos&0x80) // negative
+        int nPos=mBitPos-(int)numBits;
+        if (nPos<0)
         {
-            mBytePos-=(7-mBitPos)>>3;
-            mBitPos&=7;
+            mBytePos-=(7-nPos)>>3;
+            mBitPos=nPos&7;
+        }else
+        {
+            mBitPos=nPos;
         }
     }
 
@@ -231,15 +237,13 @@ public:
         }
     }
 
-    // numBits <= 17
+    // numBits <= 25
     uint32_t nextBits(const uint8_t numBits)
     {
         uint32_t tmp;
-        vassert(numBits<=17);
+        vassert(numBits!=0 && numBits<=25);
         switch (numBits)
         {
-        case 0:
-            return 0;
         case 1:
             return nextBit();
         case 2 ... 9: // gcc extenstion
@@ -247,6 +251,9 @@ public:
             break;
         case 10 ... 17:
             tmp=front17b(numBits);
+            break;
+        case 18 ... 25:
+            tmp=front25b(numBits);
             break;
         }
         skipBits(numBits);
@@ -284,6 +291,7 @@ private:
 
     uint32_t front9b(const uint8_t numBits) const
     {
+        // TODO: speed up
         uint32_t tmp=mBitReservoir[mBytePos];
         tmp=(tmp<<8)|mBitReservoir[mBytePos+1];
         tmp&=(1<<(16-mBitPos))-1;
@@ -293,12 +301,37 @@ private:
 
     uint32_t front17b(const uint8_t numBits) const
     {
+        // TODO: speed up
         uint32_t tmp=mBitReservoir[mBytePos];
         tmp=(tmp<<8)|mBitReservoir[mBytePos+1];
         tmp=(tmp<<8)|mBitReservoir[mBytePos+2];
         tmp&=(1<<(24-mBitPos))-1;
         tmp>>=24-mBitPos-numBits;
         return tmp;
+    }
+
+    uint32_t front25b(const uint8_t numBits) const
+    {
+        // TODO: speed up
+        uint32_t tmp=mBitReservoir[mBytePos];
+        tmp=(tmp<<8)|mBitReservoir[mBytePos+1];
+        tmp=(tmp<<8)|mBitReservoir[mBytePos+2];
+        tmp=(tmp<<8)|mBitReservoir[mBytePos+2];
+        tmp&=(1<<(32-mBitPos))-1;
+        tmp>>=32-mBitPos-numBits;
+        return tmp;
+    }
+
+    // adjust pointer when eof is reached, and return current window size
+    size_t fixPosition()
+    {
+        if (mBytePos>=mEndPos)
+        {
+            assert(mBytePos<=mCapacity);
+            mBytePos=mEndPos;
+            mBitPos=0;
+        }
+        return mEndPos-mBytePos;
     }
 
     void moveDataTo(uint8_t* newBuffer)

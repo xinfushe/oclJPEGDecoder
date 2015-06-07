@@ -164,14 +164,8 @@ public:
 
     const DataType& operator [](const char * hcode) const
     {
-        vassert(hcode!=NULL);
-        const size_t len=strlen(hcode);
-        vassert(len>0);
         // construct a temporary bitstream
-        BitStream tmp(((len-1)>>3)+1);
-        for (size_t i=0;i<len;i++)
-            tmp.writeBit(hcode[i]=='1');
-        tmp.rewind();
+        BitStream tmp(hcode);
         return *findCode(tmp);
     }
 

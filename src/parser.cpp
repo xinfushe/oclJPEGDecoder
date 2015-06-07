@@ -102,7 +102,7 @@ bool read_dqt(JPG_DATA &jpg, FILE * const strm, size_t len)
             puts("[X] DQT is corrupted.");
             return false;
         }
-        printf("[ ] Got Quantization Table #%u\n",id);
+        printf("[ ] ^^^ Quantization Table #%u (%d-bit)\n",id,8<<prec);
     }
     return true;
 }
@@ -258,7 +258,7 @@ invalidtree:
             puts("[X] DQT is corrupted.");
             return false;
         }
-        printf("[ ] Got Huffman Table #%u (Type:%s)\n",id,type?"AC":"DC");
+        printf("[ ] ^^^ Huffman Table #%u (Type:%s)\n",id,type?"AC":"DC");
     }
     return true;
 }
@@ -289,7 +289,9 @@ bool load_jpg(const char *filePath)
         goto error;
     }
     printf("JPEG Version: %04x\n",bswap(jpg.app0.ver));
+    /*
     printf("Resolution: %u * %u\n",bswap(jpg.app0.res_x),bswap(jpg.app0.res_y));
+    */
     printf("Thumbnail: %u * %u\n",jpg.app0.thumbnail_width,jpg.app0.thumbnail_height);
     // read other APP tags
     tag[1]=0;
@@ -304,7 +306,7 @@ bool load_jpg(const char *filePath)
     do
     {
         /*
-            const long start_pos=ftell(fp);
+        const long start_pos=ftell(fp);
         */
         fread(&len,sizeof(len),1,fp);
         len=bswap(len)-2;
@@ -351,11 +353,16 @@ bool load_jpg(const char *filePath)
             {
                 puts("[ ] file format supported. ready to decode.");
             }
+            // TODO: timing
             if (!decode_huffman_data(jpg,fp))
             {
                 puts("[X] decode_huffman_data() failed");
                 goto error;
             }
+            break;
+        case 0xDD: // DRI
+            puts("[X] DRI is not supported");
+            goto error;
             break;
         case 0xD9: // EOI
         default:
