@@ -37,6 +37,7 @@
 		<Unit filename="bitstream.cpp" />
 		<Unit filename="bitstream.h" />
 		<Unit filename="decoder.cpp" />
+		<Unit filename="decoder.h" />
 		<Unit filename="huffman.cpp" />
 		<Unit filename="huffman.h" />
 		<Unit filename="jpeg.h" />

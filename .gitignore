@@ -27,3 +27,4 @@ obj/
 Debug/
 Release/
 *.layout
+*.depend

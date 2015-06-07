@@ -4,8 +4,8 @@
 #include <string.h>
 #include <assert.h>
 
-// jpeg structure definition
 #include "jpeg.h"
+#include "decoder.h"
 
 uint16_t inline bswap(const uint16_t x)
 {
@@ -182,7 +182,6 @@ bool read_sos(JPG_DATA &jpg, FILE * const strm, size_t len)
 
 bool read_dht(JPG_DATA &jpg, FILE * const strm, size_t len)
 {
-    uint16_t word;
     uint8_t byte;
     while (len>0)
     {
@@ -321,7 +320,9 @@ bool loadJPG(const char *filePath)
     }
     do
     {
-        const long start_pos=ftell(fp);
+        /*
+            const long start_pos=ftell(fp);
+        */
         fread(&len,sizeof(len),1,fp);
         len=bswap(len)-2;
         switch (tag[1])
@@ -359,7 +360,19 @@ bool loadJPG(const char *filePath)
                 puts("[X] read_sos() failed");
                 goto error;
             }
-            // TODO: decode
+            if (!is_supported_file(jpg))
+            {
+                puts("[X] this file is not supported");
+                goto error;
+            }else
+            {
+                puts("[ ] file format supported. ready to decode.");
+            }
+            if (!decode_huffman_data(jpg,fp))
+            {
+                puts("[X] decode_huffman_data() failed");
+                goto error;
+            }
             break;
         case 0xD9: // EOI
         default:
