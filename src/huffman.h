@@ -9,12 +9,12 @@ class HuffmanTreeNode
 public:
     typedef HuffmanTreeNode<ary, DataTp> NodeType, SelfType;
 
-    HuffmanTreeNode(const NodeType * parent):mParent(parent),mID(++NodeCount)
+    HuffmanTreeNode(const NodeType * parent):mParent(parent)
     {
         mNumChildren = 0;
     }
 
-    HuffmanTreeNode(const NodeType * parent, const DataTp& data):mParent(parent),mID(++NodeCount)
+    HuffmanTreeNode(const NodeType * parent, const DataTp& data):mParent(parent)
     {
         assert(parent!=NULL);
         mNumChildren = -1;
@@ -37,13 +37,14 @@ public:
     const NodeType& getChildren(const int idx) const
     {
         // must be a not-null child
-        assert(idx>=0 && idx<ary && mChildren[idx]!=NULL);
+        vassert(idx>=0 && idx<ary);
+        assert(mChildren[idx]!=NULL);
         return *mChildren[idx];
     }
 
     NodeType& createSubTree(const int idx)
     {
-        assert(idx>=0 && idx<ary);
+        vassert(idx>=0 && idx<ary);
         assert(!isLeaf());
 
         if (mChildren[idx]!=NULL)
@@ -61,8 +62,8 @@ public:
 
     NodeType& createLeaf(const int idx, const DataTp& data)
     {
-        assert(idx>=0 && idx<ary && mChildren[idx]==NULL);
-        assert(!isLeaf());
+        vassert(idx>=0 && idx<ary);
+        assert(!isLeaf() && mChildren[idx]==NULL);
 
         ++mNumChildren;
         assert(mNumChildren<=ary);
@@ -80,21 +81,10 @@ public:
     }
 
     // access to data
-    const DataTp& getData() const
+    operator const DataTp& () const
     {
         assert(isLeaf());
         return mData;
-    }
-
-    operator const DataTp& () const
-    {
-        return getData();
-    }
-
-    void setData(const DataTp& data)
-    {
-        assert(isLeaf());
-        mData=data;
     }
 
     size_t getCodeLength() const
@@ -121,8 +111,6 @@ private:
 
     const char* mCode;
     size_t mCodeLength;
-    const long mID;
-    static long NodeCount;
 };
 
 template <int ary, typename DataType>
@@ -182,7 +170,6 @@ private:
 };
 
 // though it's extremely ugly, the implementation must be put in this header file
-template <int a, class T> long HuffmanTreeNode<a,T>::NodeCount = 0;
 
 int inline binToDec(const char * bin, const size_t len)
 {

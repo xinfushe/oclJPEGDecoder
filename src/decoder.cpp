@@ -7,6 +7,9 @@
 #include "bitstream.h"
 #include "huffman.h"
 
+const int DEFAULT_ARY=4;
+typedef HuffmanTree<DEFAULT_ARY,uint8_t> HufTree;
+
 bool is_supported_file(JPG_DATA &jpg)
 {
     if (jpg.frame_info.bit_depth!=8)
@@ -57,163 +60,184 @@ bool is_supported_file(JPG_DATA &jpg)
     return true;
 }
 
-static int inline convert_number(int value, const uint8_t len)
+static int inline convert_number(int value, const uint8_t nbits)
 {
-    if (!(value>>(len-1))) // sign bit
+    if (!(value>>(nbits-1))) // sign bit
     {
         // negative
         ++value;
-        value-=1<<len;
+        value-=1<<nbits;
+        vassert(value!=0);
     }
     return value;
 }
 
-bool decode_huffman_data(JPG_DATA &j, FILE * const fp)
+static int inline read_number(BitStream& strm, const uint8_t bits)
 {
-    const int DEFAULT_ARY=4;
+    if (bits)
+    {
+        int value=strm.nextBits(bits);
+        return convert_number(value,bits);
+    }else
+    return 0;
+}
+
+static bool read_more_data(BitStream& strm, FILE * const fp, const size_t buffer_size)
+{
+    if (strm.getSize()<buffer_size)
+    {
+        uint8_t buffer[buffer_size+1];
+        const size_t tot=fread(buffer,1,buffer_size,fp);
+
+        for (size_t left=0;left<tot;left++)
+        {
+            size_t right;
+            for (right=left;right<tot && buffer[right]!=0xFF;right++);
+            if (right<tot)
+            {
+                if (buffer[right+1]==0)
+                    strm.append(&buffer[left],right-left+1);
+                else if (buffer[right+1]==0xD9)
+                {
+                    fseek(fp,right-tot,SEEK_CUR);
+                    break;
+                }
+                else
+                    return false;
+            }else
+            {
+                strm.append(&buffer[left],tot-left);
+                break;
+            }
+            left=right+1;
+        }
+    }
+    return true;
+}
+
+void decode_init(JPG_DATA &jpg)
+{
+    const SOF0 &frame=jpg.frame_info;
+    jpg.mcu_width=0;
+    jpg.mcu_height=0;
+    for (int i=0;i<frame.num_channels;i++)
+    {
+        const int h=frame.channel_info[i].sampling_factor>>4;
+        const int v=frame.channel_info[i].sampling_factor&0xF;
+        jpg.mcu_width=max(jpg.mcu_width,h);
+        jpg.mcu_height=max(jpg.mcu_height,v);
+        jpg.blks_per_mcu[i]=h*v;
+    }
+    jpg.mcu_width*=8;
+    jpg.mcu_height*=8;
+    assert(jpg.mcu_width==16 && jpg.mcu_height==16 && jpg.blks_per_mcu[0]==4 && jpg.blks_per_mcu[1]==1); // only for 4:2:0
+
+    jpg.mcu_count_w=(frame.img_width-1)/jpg.mcu_width+1;
+    jpg.mcu_count_h=(frame.img_height-1)/jpg.mcu_height+1;
+    jpg.num_mcu=jpg.mcu_count_w*jpg.mcu_count_h;
+
+    printf("[ ] %d * %d = %d MCUs in total\n",jpg.mcu_count_w,jpg.mcu_count_h,jpg.num_mcu);
+    printf("[ ] MCU Size: %u px * %u px\n",jpg.mcu_width,jpg.mcu_height);
+}
+
+static bool decode_block(BitStream& strm, int& last_dc, int coef[64], const HufTree& dc, const HufTree& ac)
+{
+    int count=0;
+    int value;
+    // read in dc component
+    const auto hnode=dc.findCode(strm);
+    if (hnode==NULL) return false;
+
+    const auto hval=*hnode;
+    assert(hval<=25);
+    value=read_number(strm,hval);
+
+    coef[count++]=last_dc+=value;
+
+    // read in 63 ac components
+    while (count<64)
+    {
+        const auto hnode=ac.findCode(strm);
+        if (hnode==NULL) return false;
+
+        const int num_leading_0=(*hnode)>>4;
+        const uint8_t len_val=(*hnode)&0xF;
+
+        count+=num_leading_0; // skip consecutive zeroes
+        assert(count+1<=64);
+
+        if (len_val==0) // value is 0 in this case
+        {
+            if (num_leading_0==0)
+                break;
+            else
+                count++;
+        }else // value is non-zero
+        {
+            int value=read_number(strm,len_val);
+            coef[count++]=value;
+        }
+    }
+    assert(!strm.eof());
+    return count<=64;
+}
+
+bool decode_huffman_data(JPG_DATA &jpg, FILE * const fp)
+{
     const size_t MIN_BUFFER_SIZE=512;
     // create huffman trees
-    HuffmanTree<DEFAULT_ARY,uint8_t>* htree[32]={NULL};
+    HufTree* htree[32]={NULL};
     for (uint8_t i=0;i<32;i++)
-    {
-        if (j.huffman_table[i]!=NULL)
+        if (jpg.huffman_table[i]!=NULL)
         {
-            htree[i]=new HuffmanTree<DEFAULT_ARY,uint8_t>(j.huffman_table[i]->codeword,j.huffman_table[i]->value,j.huffman_table[i]->num_codeword);
+            htree[i]=new HufTree(jpg.huffman_table[i]->codeword,jpg.huffman_table[i]->value,jpg.huffman_table[i]->num_codeword);
         }
-    }
-    // prepare
-    j.mcu_width=0;
-    j.mcu_height=0;
-    j.yblks_per_mcu=0;
-    j.blks_per_mcu=0;
-    for (int i=0;i<j.frame_info.num_channels;i++)
-    {
-        const int h=j.frame_info.channel_info[i].sampling_factor>>4;
-        const int v=j.frame_info.channel_info[i].sampling_factor&0xF;
-        j.mcu_width=max(j.mcu_width,h);
-        j.mcu_height=max(j.mcu_height,v);
-        j.blks_per_mcu+=h*v;
-        if (i==0)
-            j.yblks_per_mcu=h*v;
-        else
-            assert(h*v==1);
-    }
-    j.mcu_width*=8;
-    j.mcu_height*=8;
-    assert(j.mcu_width==16 && j.mcu_height==16 && j.blks_per_mcu==6 && j.yblks_per_mcu==4); // only for 4:2:0
-
-    j.mcu_count_w=(j.frame_info.img_width-1)/j.mcu_width+1;
-    j.mcu_count_h=(j.frame_info.img_height-1)/j.mcu_height+1;
-    j.num_mcu=j.mcu_count_w*j.mcu_count_h;
-
-    printf("[ ] %d * %d = %d MCUs in total\n",j.mcu_count_w,j.mcu_count_h,j.num_mcu);
-    printf("[ ] MCU Size: %u px * %u px\n",j.mcu_width,j.mcu_height);
+    // initialization
+    decode_init(jpg);
     // now we can start
-    BitStream strm(1024);
-    int dccoef[4]={0};
-    int n;
-    for (n=0;n<j.num_mcu;n++)
+    BitStream strm(1536);
+    const int& num_channels=jpg.frame_info.num_channels;
+    int *dc_coef=new int[num_channels];
+    int mcu_idx,ch_idx,blk_idx;
+    for (mcu_idx=0;mcu_idx<jpg.num_mcu;mcu_idx++)
     {
-        if (n>0 && strm.eof())
+        for (ch_idx=0;ch_idx<num_channels;ch_idx++)
         {
-            printf("[X] data incomplete. (%d/%d mcu)\n",n,j.num_mcu);
-            return false;
-        }
-        for (int blk=0;blk<j.blks_per_mcu;blk++)
-        {
-            const HuffmanTree<DEFAULT_ARY,uint8_t> *ac,*dc;
-            const int ch=(blk<j.yblks_per_mcu)?0:blk-j.yblks_per_mcu+1;
-            int ncoeff=0;
-            vassert(ch>=0 && ch<(int)COUNT_OF(dccoef));
-            dc=htree[j.scan_info.channel_data[ch].huff_tbl_id>>4];
-            ac=htree[0x10|(j.scan_info.channel_data[ch].huff_tbl_id&0xF)];
-            vassert(dc!=NULL && ac!=NULL);
-
-            // get more data
-            if (strm.getSize()<MIN_BUFFER_SIZE)
+            if (mcu_idx>0 && strm.eof())
             {
-                uint8_t tmpBuffer[MIN_BUFFER_SIZE+1];
-                size_t cnt=fread(tmpBuffer,1,MIN_BUFFER_SIZE,fp);
-                assert(cnt>0);
-
-                for (size_t i=0;i<cnt;i++)
-                {
-                    size_t j;
-                    for (j=i;j<cnt && tmpBuffer[j]!=0xFF;j++);
-                    if (j<cnt)
-                    {
-                        if (tmpBuffer[j+1]==0)
-                            strm.append(&tmpBuffer[i],j-i+1);
-                        else if (tmpBuffer[j+1]==0xD9)
-                        {
-                            fseek(fp,j-cnt,SEEK_CUR);
-                            break;
-                        }
-                        else
-                            return false;
-                    }else
-                    {
-                        strm.append(&tmpBuffer[i],cnt-i);
-                    }
-                    i=j+1;
-                }
-            }
-            // read in dc component
-            const auto node=dc->findCode(strm);
-            if (node==NULL)
-            {
-corrupted:
-                printf("[X] data corrupted. (%d/%d mcu %d/%d blk #%d coef)\n",n,j.num_mcu,blk,j.blks_per_mcu,ncoeff);
+                printf("[X] data incomplete. (%d/%d mcu)\n",mcu_idx,jpg.num_mcu);
                 return false;
             }
-            uint32_t data=node->getData();
-            assert(data<=25);
-            if (data)
+            for (blk_idx=0;blk_idx<jpg.blks_per_mcu[ch_idx];blk_idx++)
             {
+                // get more data
+                read_more_data(strm,fp,MIN_BUFFER_SIZE);
 
-                int value=strm.nextBits(data);
-                value=convert_number(value,data);
-                dccoef[ch]+=value;
-            }
-            int mat[64]={0};
-            mat[ncoeff++]=dccoef[ch];
-            // read in 63 ac components
-            while (ncoeff<64)
-            {
-                const auto node=ac->findCode(strm);
-                if (node==NULL) goto corrupted;
-                uint32_t data=*node;
-                const int num0=data>>4;
-                const uint8_t valLen=data&0xF;
-                ncoeff+=num0; // skip consecutive zeroes
-                assert(ncoeff+1<=64);
-                if (valLen==0)
+                // determine which huffman tree to use
+                const auto dc=htree[jpg.scan_info.channel_data[ch_idx].huff_tbl_id>>4];
+                const auto ac=htree[0x10|(jpg.scan_info.channel_data[ch_idx].huff_tbl_id&0xF)];
+                vassert(dc!=NULL && ac!=NULL);
+
+                int mat[64]={0};
+                if (!decode_block(strm,dc_coef[ch_idx],mat,*dc,*ac))
+                    goto corrupted;
+                else
                 {
-                    if (num0==0)
-                        break;
-                    else
-                        ncoeff++;
-                }else
-                {
-                    int value=strm.nextBits(valLen);
-                    value=convert_number(value,valLen);
-                    mat[ncoeff++]=value;
-                    assert(value!=0);
+                    printf("[] === (%d/%d mcu %d/%d ch %d/%d blk) ===\n",mcu_idx,jpg.num_mcu,ch_idx,num_channels,blk_idx,jpg.blks_per_mcu[ch_idx]);
+                    for (int k=0;k<64;k++)
+                        printf("%d,",mat[k]);
+                    puts("");
                 }
             }
-
-/*             printf("[] === (%d/%d mcu %d/%d blk) ===\n",n,j.num_mcu,blk,j.blks_per_mcu);
- *             for (int k=0;k<64;k++)
- *                 printf("%d,",mat[k]);
- *             puts("");
- */
-            assert(ncoeff<=64);
-            assert(!strm.eof());
         }
     }
+    goto finished;
+corrupted:
+    printf("[X] data corrupted. (%d/%d mcu %d/%d ch %d/%d blk)\n",mcu_idx,jpg.num_mcu,ch_idx,num_channels,blk_idx,jpg.blks_per_mcu[ch_idx]);
+finished:
     // clean
     for (uint8_t i=0;i<32;i++)
         if (htree[i]!=NULL)
             delete htree[i];
-    return n==j.num_mcu;
+    return mcu_idx==jpg.num_mcu;
 }
