@@ -21,7 +21,7 @@
 				<Option object_output="obj/Debug/" />
 				<Option type="1" />
 				<Option compiler="gcc" />
-				<Option parameters='&quot;..\test\JPEG_example_JPG_RIP_050.jpg&quot;' />
+				<Option parameters='&quot;C:\Users\Kiro\Pictures\Danbo_Danboard_wallpaper_5.jpg&quot; &quot;..\test\JPEG_example_JPG_RIP_050.jpg&quot;' />
 				<Compiler>
 					<Add option="-g" />
 					<Add option="-DVERBOSE" />
@@ -58,10 +58,12 @@
 		</Compiler>
 		<Unit filename="bitstream.cpp" />
 		<Unit filename="bitstream.h" />
+		<Unit filename="cpuIDCT8x8.cpp" />
 		<Unit filename="decoder.cpp" />
 		<Unit filename="decoder.h" />
 		<Unit filename="huffman.cpp" />
 		<Unit filename="huffman.h" />
+		<Unit filename="idct.h" />
 		<Unit filename="jpeg.h" />
 		<Unit filename="macro.h" />
 		<Unit filename="main.cpp" />

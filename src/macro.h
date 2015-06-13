@@ -96,7 +96,7 @@ bool inline out_of_map(int x, int y)
 
 uint32_t inline RGBClamp32(int r, int g, int b)
 {
-    int ret=0;
+    int32_t ret=0;
     if (b>0)
     {
         if (b>=255)
@@ -111,12 +111,12 @@ uint32_t inline RGBClamp32(int r, int g, int b)
         else
             ret|=g<<8;
     }
-    if (b>0)
+    if (r>0)
     {
-        if (b>=255)
+        if (r>=255)
             ret|=0xFF0000;
         else
-            ret|=b<<16;
+            ret|=r<<16;
     }
     return ret;
 }
