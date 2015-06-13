@@ -54,7 +54,6 @@ bool read_app0(JPG_DATA &jpg, FILE * const strm)
 
 bool read_dqt(JPG_DATA &jpg, FILE * const strm, size_t len)
 {
-    uint16_t word;
     uint8_t byte;
     while (len>0)
     {
@@ -71,28 +70,29 @@ bool read_dqt(JPG_DATA &jpg, FILE * const strm, size_t len)
             printf("[X] Invalid Precision Value for Quantization Table #%u.\n",id);
             return false;
         }
-        jpg.quantization_table[id]=new int[64];
+        jpg.quantization_table[id]=new coef_t[64];
+        uint8_t qt8[64];
+        uint16_t qt16[64];
         switch (prec)
         {
         case 0: // 8-bit
-            if (1!=fread(jpg.quantization_table[id],sizeof(uint8_t[64]),1,strm))
+            if (1==fread(qt8,sizeof(qt8),1,strm))
             {
+                for (size_t i=0;i<64;i++)
+                    jpg.quantization_table[id][i]=qt8[i];
+            }else
+            {
+corrupted:
                 printf("[X] Quantization Table #%u is corrupted.\n",id);
                 return false;
             }
             break;
         case 1: // 16-bit
-            for (size_t i=0;i<64;i++)
+            if (1==fread(qt16,sizeof(qt16),1,strm))
             {
-                if (1!=fread(&word,sizeof(uint16_t),1,strm))
-                {
-                    printf("[X] Quantization Table #%u is corrupted.\n",id);
-                    return false;
-                }else
-                {
-                    ((uint16_t*)jpg.quantization_table[id])[i]=bswap(word);
-                }
-            }
+                for (size_t i=0;i<64;i++)
+                    jpg.quantization_table[id][i]=qt16[i];
+            }else goto corrupted;
             break;
         }
         if (len>=64*(size_t)(prec+1)+1)
@@ -102,7 +102,7 @@ bool read_dqt(JPG_DATA &jpg, FILE * const strm, size_t len)
             puts("[X] DQT is corrupted.");
             return false;
         }
-        printf("[ ] ^^^ Quantization Table #%u (%d-bit)\n",id,8<<prec);
+        printf("[ ] --- Quantization Table #%u (%d-bit)\n",id,8<<prec);
     }
     return true;
 }
@@ -152,7 +152,7 @@ bool read_sos(JPG_DATA &jpg, FILE * const strm, size_t len)
     {
         for (uint8_t i=0;i<jpg.scan_info.num_channels;i++)
         {
-            printf("Channel #%u: id=%u, uses huffman table AC%u DC%u\n",i, \
+            printf("Channel #%u: id=%u, uses huffman table AC%u & DC%u\n",i, \
                    jpg.scan_info.channel_data[i].id, \
                    jpg.scan_info.channel_data[i].huff_tbl_id>>4, \
                    jpg.scan_info.channel_data[i].huff_tbl_id&0xF);
@@ -357,6 +357,11 @@ bool load_jpg(const char *filePath)
             if (!decode_huffman_data(jpg,fp))
             {
                 puts("[X] decode_huffman_data() failed");
+                goto error;
+            }
+            if (!decode_mcu_data(jpg,fp))
+            {
+                puts("[X] decode_mcu_data() failed");
                 goto error;
             }
             break;

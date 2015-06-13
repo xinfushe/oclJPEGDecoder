@@ -87,3 +87,9 @@ inline T max(const T& x,const T& y) {return x>y?x:y;}
 
 template <typename T>
 inline T max(const T& x,const T& y,const T& z) {return max(max(x,y),z);}
+
+template <int r, int c>
+bool inline out_of_map(int x, int y)
+{
+    return x<0 || x>=c || y<0 || y>=r;
+}

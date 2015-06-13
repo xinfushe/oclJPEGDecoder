@@ -6,9 +6,12 @@
 #include "jpeg.h"
 #include "bitstream.h"
 #include "huffman.h"
+#include "zigzag.h"
 
 const int DEFAULT_ARY=4;
 typedef HuffmanTree<DEFAULT_ARY,uint8_t> HufTree;
+
+ZigZag<8,8> zigzag_table;
 
 bool is_supported_file(JPG_DATA &jpg)
 {
@@ -92,6 +95,7 @@ static bool read_more_data(BitStream& strm, FILE * const fp, const size_t buffer
         for (size_t left=0;left<tot;left++)
         {
             size_t right;
+            // TODO: use memchr()
             for (right=left;right<tot && buffer[right]!=0xFF;right++);
             if (right<tot)
             {
@@ -101,10 +105,10 @@ static bool read_more_data(BitStream& strm, FILE * const fp, const size_t buffer
                 {
                     if (left<right) strm.append(&buffer[left],right-left);
                     fseek(fp,right-tot,SEEK_CUR);
-                    break;
+                    return false; // eoi
                 }
                 else
-                    return false;
+                    return false; // error
             }else
             {
                 strm.append(&buffer[left],tot-left);
@@ -121,6 +125,7 @@ void decode_init(JPG_DATA &jpg)
     const SOF0 &frame=jpg.frame_info;
     jpg.mcu_width=0;
     jpg.mcu_height=0;
+    jpg.tot_blks_per_mcu=0;
     for (int i=0;i<frame.num_channels;i++)
     {
         const int h=frame.channel_info[i].sampling_factor>>4;
@@ -128,6 +133,7 @@ void decode_init(JPG_DATA &jpg)
         jpg.mcu_width=max(jpg.mcu_width,h);
         jpg.mcu_height=max(jpg.mcu_height,v);
         jpg.blks_per_mcu[i]=h*v;
+        jpg.tot_blks_per_mcu+=h*v;
     }
     jpg.mcu_width*=8;
     jpg.mcu_height*=8;
@@ -135,13 +141,17 @@ void decode_init(JPG_DATA &jpg)
 
     jpg.mcu_count_w=(frame.img_width-1)/jpg.mcu_width+1;
     jpg.mcu_count_h=(frame.img_height-1)/jpg.mcu_height+1;
-    jpg.num_mcu=jpg.mcu_count_w*jpg.mcu_count_h;
+    jpg.mcu_count=jpg.mcu_count_w*jpg.mcu_count_h;
+    jpg.mcu_data=new coef_t[jpg.mcu_count*jpg.tot_blks_per_mcu][64];
+    static_assert(sizeof(jpg.mcu_data)==sizeof(void*) && \
+                  64*sizeof(coef_t)==((char*)&jpg.mcu_data[1][0]-(char*)&jpg.mcu_data[0][0]) && \
+                  64*sizeof(coef_t)==sizeof(jpg.mcu_data[0]),"inappropratite type");
 
-    printf("[ ] %d * %d = %d MCUs in total\n",jpg.mcu_count_w,jpg.mcu_count_h,jpg.num_mcu);
+    printf("[ ] %d * %d = %d MCUs in total, %d blocks per MCU.\n",jpg.mcu_count_w,jpg.mcu_count_h,jpg.mcu_count,jpg.tot_blks_per_mcu);
     printf("[ ] MCU Size: %u px * %u px\n",jpg.mcu_width,jpg.mcu_height);
 }
 
-static bool decode_block(BitStream& strm, int& last_dc, int coef[64], const HufTree& dc, const HufTree& ac)
+static bool decode_huffman_block(BitStream& strm, coef_t& last_dc, coef_t coef[64], const HufTree& dc, const HufTree& ac)
 {
     int count=0;
     int value;
@@ -185,9 +195,6 @@ static bool decode_block(BitStream& strm, int& last_dc, int coef[64], const HufT
 bool decode_huffman_data(JPG_DATA &jpg, FILE * const fp)
 {
     const size_t MIN_BUFFER_SIZE=512;
-//    FILE *log = fopen("m:\\my.txt","wt");
-//    static int i;
-
     // create huffman trees
     HufTree* htree[32]={NULL};
     for (uint8_t i=0;i<32;i++)
@@ -199,47 +206,40 @@ bool decode_huffman_data(JPG_DATA &jpg, FILE * const fp)
     decode_init(jpg);
     // now we can start
     BitStream strm(1536);
-    const int& num_channels=jpg.frame_info.num_channels;
-    int *dc_coef=new int[num_channels];
-    memset(dc_coef,0,sizeof(int)*num_channels);
-    int mcu_idx,ch_idx,blk_idx;
-    for (mcu_idx=0;mcu_idx<jpg.num_mcu;mcu_idx++)
+    const int& num_channels=jpg.scan_info.num_channels; // here we refer to scan_info because it's releated to huffman decoding
+    coef_t *dc_coef=new coef_t[num_channels];
+    memset(dc_coef,0,sizeof(coef_t)*num_channels);
+    bool more_data_avail=true;
+    int mcu_idx,ch_idx,blk_idx,overall_idx=0;
+    for (mcu_idx=0;mcu_idx<jpg.mcu_count;mcu_idx++)
     {
         for (ch_idx=0;ch_idx<num_channels;ch_idx++)
         {
-            if (mcu_idx>0 && strm.eof())
+            if ((mcu_idx>0 || ch_idx>0) && strm.eof())
             {
-                printf("[X] data incomplete. (%d/%d mcu)\n",mcu_idx,jpg.num_mcu);
+                printf("[X] data incomplete. (%d/%d mcu)\n",mcu_idx,jpg.mcu_count);
                 return false;
             }
             for (blk_idx=0;blk_idx<jpg.blks_per_mcu[ch_idx];blk_idx++)
             {
                 // get more data
-                read_more_data(strm,fp,MIN_BUFFER_SIZE);
+                if (more_data_avail)
+                    more_data_avail=read_more_data(strm,fp,MIN_BUFFER_SIZE);
 
                 // determine which huffman tree to use
                 const auto dc=htree[jpg.scan_info.channel_data[ch_idx].huff_tbl_id>>4];
                 const auto ac=htree[0x10|(jpg.scan_info.channel_data[ch_idx].huff_tbl_id&0xF)];
                 vassert(dc!=NULL && ac!=NULL);
 
-                int mat[64]={0};
-                if (!decode_block(strm,dc_coef[ch_idx],mat,*dc,*ac))
+                coef_t mat[64]={0};
+                if (!decode_huffman_block(strm,dc_coef[ch_idx],mat,*dc,*ac))
                 {
-                    printf("[X] data corrupted. (%d/%d mcu %d/%d ch %d/%d blk)\n",mcu_idx,jpg.num_mcu,ch_idx,num_channels,blk_idx,jpg.blks_per_mcu[ch_idx]);
+                    printf("[X] data corrupted. (%d/%d mcu %d/%d ch %d/%d blk)\n",mcu_idx,jpg.mcu_count,ch_idx,num_channels,blk_idx,jpg.blks_per_mcu[ch_idx]);
                     goto corrupted;
                 }
                 else
                 {
-                    //printf("[] === (%d/%d mcu %d/%d ch %d/%d blk) ===\n",mcu_idx,jpg.num_mcu,ch_idx,num_channels,blk_idx,jpg.blks_per_mcu[ch_idx]);
-//                    ++i;
-//                    fprintf(log,"block %d\n",i);
-//                    for (int k=0;k<64;k++)
-//                    {
-//                        //printf("%d,",mat[k]);
-//                        fprintf(log,"%d,",mat[k]);
-//                    }
-//                    fputs("\n",log);
-                    //puts("");
+                    memcpy(&jpg.mcu_data[overall_idx++],mat,sizeof(mat));
                 }
             }
         }
@@ -248,10 +248,61 @@ bool decode_huffman_data(JPG_DATA &jpg, FILE * const fp)
 corrupted:
 
 finished:
-//    fclose(log);
     // clean
     for (uint8_t i=0;i<32;i++)
         if (htree[i]!=NULL)
             delete htree[i];
-    return mcu_idx==jpg.num_mcu;
+    return mcu_idx==jpg.mcu_count;
+}
+
+template <int rows, int cols>
+void zigzag_init(int *table)
+{
+    const int n=rows*cols;
+    int cur_x=0,cur_y=0;
+    int dx=1,dy=-1; // upper-right direction
+    for (int i=0;i<n;i++)
+    {
+        table[i]=cur_y*cols+cur_x;
+        if (out_of_map<rows,cols>(cur_x+dx,cur_y+dy))
+        {
+            if (cur_x<cols-1 && cur_y<rows-1)
+            {
+                if (dx>0) cur_x++;else cur_y++;
+            }else
+            {
+                if (dx<0) cur_x++;else cur_y++;
+            }
+            // change direction
+            dx=-dx;dy=-dy;
+        }else
+        {
+            cur_x+=dx;
+            cur_y+=dy;
+        }
+    }
+    assert(table[n-1]==n-1);
+}
+
+bool decode_mcu_data(JPG_DATA &jpg, FILE * const fp)
+{
+    // iterating MCUs
+    int idx=0;
+    for (int i=0;i<jpg.mcu_count;i++)
+    {
+        for (int j=0;j<jpg.frame_info.num_channels;j++)
+        {
+            const coef_t * const qt=jpg.quantization_table[jpg.frame_info.channel_info[j].quant_tbl_id];
+            for (int k=0;k<jpg.blks_per_mcu[j];k++)
+            {
+                coef_t mat[64];
+                for (int p=0;p<64;p++)
+                {
+                    mat[zigzag_table[p]]=jpg.mcu_data[idx][p]*qt[p]; // zig-zag & inverse quantizatize
+                }
+                idx++;
+            }
+        }
+    }
+    return false;
 }

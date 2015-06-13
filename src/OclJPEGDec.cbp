@@ -67,6 +67,7 @@
 		<Unit filename="main.cpp" />
 		<Unit filename="oclDCT8x8.cpp" />
 		<Unit filename="parser.cpp" />
+		<Unit filename="zigzag.h" />
 		<Extensions>
 			<code_completion />
 			<debugger />

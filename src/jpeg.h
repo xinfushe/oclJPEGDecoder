@@ -49,10 +49,12 @@ struct HUFFMAN_TABLE
     uint8_t value[256];
 };
 
+typedef int coef_t;
+
 struct JPG_DATA
 {
     APP0 app0;
-    int *quantization_table[4];
+    coef_t *quantization_table[4];
     SOF0 frame_info;
     HUFFMAN_TABLE *huffman_table[32];
     void *thumbnail;
@@ -62,7 +64,10 @@ struct JPG_DATA
     int mcu_height; // in pixels
     int mcu_count_w;
     int mcu_count_h;
-    int num_mcu;
+    int mcu_count;
+    coef_t (*mcu_data)[64];
 
     int blks_per_mcu[4]; // Color Component Blocks per MCU
+    int tot_blks_per_mcu;
+
 };

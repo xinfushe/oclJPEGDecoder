@@ -18,6 +18,7 @@ int main(int argc, char **argv)
     test_bitstream();
     test_huffman();
     #ifdef COMPILE_ONLY
+        puts("tests done.");
         exit(0);
     #endif // COMPILE_ONLY
 
