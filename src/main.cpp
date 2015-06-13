@@ -9,6 +9,7 @@
 #include "macro.h"
 #include "bitstream.h"
 #include "huffman.h"
+#include "idct.h"
 
 bool load_jpg(const char *filePath);
 
@@ -21,6 +22,9 @@ int main(int argc, char **argv)
         puts("tests done.");
         exit(0);
     #endif // COMPILE_ONLY
+
+    // init IDCT library
+    Initialize_Fast_IDCT();
 
     if (argc<=1)
     {

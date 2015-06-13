@@ -93,3 +93,38 @@ bool inline out_of_map(int x, int y)
 {
     return x<0 || x>=c || y<0 || y>=r;
 }
+
+uint32_t inline RGBClamp32(int r, int g, int b)
+{
+    int ret=0;
+    if (b>0)
+    {
+        if (b>=255)
+            ret|=0xFF;
+        else
+            ret|=b;
+    }
+    if (g>0)
+    {
+        if (g>=255)
+            ret|=0xFF00;
+        else
+            ret|=g<<8;
+    }
+    if (b>0)
+    {
+        if (b>=255)
+            ret|=0xFF0000;
+        else
+            ret|=b<<16;
+    }
+    return ret;
+}
+
+#ifndef abs
+template <class T>
+T inline abs(T n)
+{
+    return n>=0?n:-n;
+}
+#endif // abs
