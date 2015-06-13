@@ -99,6 +99,7 @@ static bool read_more_data(BitStream& strm, FILE * const fp, const size_t buffer
                     strm.append(&buffer[left],right-left+1);
                 else if (buffer[right+1]==0xD9)
                 {
+                    if (left<right) strm.append(&buffer[left],right-left);
                     fseek(fp,right-tot,SEEK_CUR);
                     break;
                 }
@@ -178,13 +179,15 @@ static bool decode_block(BitStream& strm, int& last_dc, int coef[64], const HufT
             coef[count++]=value;
         }
     }
-    assert(!strm.eof());
     return count<=64;
 }
 
 bool decode_huffman_data(JPG_DATA &jpg, FILE * const fp)
 {
     const size_t MIN_BUFFER_SIZE=512;
+//    FILE *log = fopen("m:\\my.txt","wt");
+//    static int i;
+
     // create huffman trees
     HufTree* htree[32]={NULL};
     for (uint8_t i=0;i<32;i++)
@@ -198,6 +201,7 @@ bool decode_huffman_data(JPG_DATA &jpg, FILE * const fp)
     BitStream strm(1536);
     const int& num_channels=jpg.frame_info.num_channels;
     int *dc_coef=new int[num_channels];
+    memset(dc_coef,0,sizeof(int)*num_channels);
     int mcu_idx,ch_idx,blk_idx;
     for (mcu_idx=0;mcu_idx<jpg.num_mcu;mcu_idx++)
     {
@@ -220,21 +224,31 @@ bool decode_huffman_data(JPG_DATA &jpg, FILE * const fp)
 
                 int mat[64]={0};
                 if (!decode_block(strm,dc_coef[ch_idx],mat,*dc,*ac))
+                {
+                    printf("[X] data corrupted. (%d/%d mcu %d/%d ch %d/%d blk)\n",mcu_idx,jpg.num_mcu,ch_idx,num_channels,blk_idx,jpg.blks_per_mcu[ch_idx]);
                     goto corrupted;
+                }
                 else
                 {
-                    printf("[] === (%d/%d mcu %d/%d ch %d/%d blk) ===\n",mcu_idx,jpg.num_mcu,ch_idx,num_channels,blk_idx,jpg.blks_per_mcu[ch_idx]);
-                    for (int k=0;k<64;k++)
-                        printf("%d,",mat[k]);
-                    puts("");
+                    //printf("[] === (%d/%d mcu %d/%d ch %d/%d blk) ===\n",mcu_idx,jpg.num_mcu,ch_idx,num_channels,blk_idx,jpg.blks_per_mcu[ch_idx]);
+//                    ++i;
+//                    fprintf(log,"block %d\n",i);
+//                    for (int k=0;k<64;k++)
+//                    {
+//                        //printf("%d,",mat[k]);
+//                        fprintf(log,"%d,",mat[k]);
+//                    }
+//                    fputs("\n",log);
+                    //puts("");
                 }
             }
         }
     }
     goto finished;
 corrupted:
-    printf("[X] data corrupted. (%d/%d mcu %d/%d ch %d/%d blk)\n",mcu_idx,jpg.num_mcu,ch_idx,num_channels,blk_idx,jpg.blks_per_mcu[ch_idx]);
+
 finished:
+//    fclose(log);
     // clean
     for (uint8_t i=0;i<32;i++)
         if (htree[i]!=NULL)

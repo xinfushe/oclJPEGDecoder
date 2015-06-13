@@ -14,11 +14,14 @@ public:
         mNumChildren = 0;
     }
 
-    HuffmanTreeNode(const NodeType * parent, const DataTp& data):mParent(parent)
+    // initialize a leaf node
+    HuffmanTreeNode(const NodeType * parent, const DataTp& data, const char * code, const size_t len):mParent(parent)
     {
         assert(parent!=NULL);
         mNumChildren = -1;
         mData = data;
+        mCode = code;
+        mCodeLength = len;
     }
 
     // access to children
@@ -60,14 +63,14 @@ public:
         }
     }
 
-    NodeType& createLeaf(const int idx, const DataTp& data)
+    NodeType& createLeaf(const int idx, const DataTp& data, const char * code, const size_t codelen)
     {
         vassert(idx>=0 && idx<ary);
         assert(!isLeaf() && mChildren[idx]==NULL);
 
         ++mNumChildren;
         assert(mNumChildren<=ary);
-        return *(mChildren[idx]=new NodeType(this, data));
+        return *(mChildren[idx]=new NodeType(this,data,code,codelen));
     }
 
     bool isLeaf() const
@@ -91,13 +94,6 @@ public:
     {
         assert(isLeaf());
         return mCodeLength;
-    }
-
-    void setCode(const char * code, const size_t len)
-    {
-        assert(isLeaf());
-        mCode=code;
-        mCodeLength=len;
     }
 
     // advanced features
@@ -129,6 +125,7 @@ public:
     {
     }
 
+    // import huffman table
     HuffmanTree(const char* const* code, const DataType* val, const size_t num):mRoot(NULL)
     {
         for (size_t i=0;i<num;i++)
@@ -196,7 +193,7 @@ HuffmanTree<a,T>::addCode(const char * hcode, const size_t hlen, const T& hval)
     {
         if (hlen-pos==lg2) //  the last few digits
         {
-            node=&(node->createLeaf(binToDec(&hcode[pos],lg2),hval));
+            node=&(node->createLeaf(binToDec(&hcode[pos],lg2),hval,hcode,hlen));
         }
         else if (hlen-pos>lg2)
         {
@@ -210,7 +207,7 @@ HuffmanTree<a,T>::addCode(const char * hcode, const size_t hlen, const T& hval)
             high|=(1<<(hlen-pos))-1; // padding with 1s
             vassert(low<high);
 
-            node=&(node->createLeaf(low,hval));
+            node=&(node->createLeaf(low,hval,hcode,hlen));
             for (int i=low+1;i<=high;i++)
             {
                 assert(tmpNode[i]==NULL);
@@ -219,7 +216,6 @@ HuffmanTree<a,T>::addCode(const char * hcode, const size_t hlen, const T& hval)
         }
     }
     assert(node!=NULL);
-    node->setCode(hcode,hlen);
 }
 
 template <int a, class T>
