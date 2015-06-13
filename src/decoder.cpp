@@ -7,6 +7,7 @@
 #include "bitstream.h"
 #include "huffman.h"
 #include "zigzag.h"
+#include "idct.h"
 
 const int DEFAULT_ARY=4;
 typedef HuffmanTree<DEFAULT_ARY,uint8_t> HufTree;
@@ -53,14 +54,18 @@ bool is_supported_file(JPG_DATA &jpg)
             return false;
         }
     }
-    if (jpg.frame_info.channel_info[0].sampling_factor!=0x22 || \
-        jpg.frame_info.channel_info[1].sampling_factor!=0x11 || \
-        jpg.frame_info.channel_info[2].sampling_factor!=0x11)
-    {
-        puts("[X] sorry, currently only supports 8-bit YUV 4:2:0 format");
-        return false;
-    }
-    return true;
+    if (jpg.frame_info.channel_info[0].sampling_factor==0x22 && \
+        jpg.frame_info.channel_info[1].sampling_factor==0x11 && \
+        jpg.frame_info.channel_info[2].sampling_factor==0x11)
+        return true;
+
+    if (jpg.frame_info.channel_info[0].sampling_factor==0x11 && \
+        jpg.frame_info.channel_info[1].sampling_factor==0x11 && \
+        jpg.frame_info.channel_info[2].sampling_factor==0x11)
+        return true;
+
+    puts("[X] sorry, currently only supports 8-bit YUV 4:2:0 format");
+    return false;
 }
 
 static int inline convert_number(int value, const uint8_t nbits)
@@ -137,7 +142,7 @@ void decode_init(JPG_DATA &jpg)
     }
     jpg.mcu_width*=8;
     jpg.mcu_height*=8;
-    assert(jpg.mcu_width==16 && jpg.mcu_height==16 && jpg.blks_per_mcu[0]==4 && jpg.blks_per_mcu[1]==1); // only for 4:2:0
+    // assert(jpg.mcu_width==16 && jpg.mcu_height==16 && jpg.blks_per_mcu[0]==4 && jpg.blks_per_mcu[1]==1); // only for 4:2:0
 
     jpg.mcu_count_w=(frame.img_width-1)/jpg.mcu_width+1;
     jpg.mcu_count_h=(frame.img_height-1)/jpg.mcu_height+1;
@@ -194,7 +199,7 @@ static bool decode_huffman_block(BitStream& strm, coef_t& last_dc, coef_t coef[6
 
 bool decode_huffman_data(JPG_DATA &jpg, FILE * const fp)
 {
-    const size_t MIN_BUFFER_SIZE=512;
+    const size_t MIN_BUFFER_SIZE=1024;
     // create huffman trees
     HufTree* htree[32]={NULL};
     for (uint8_t i=0;i<32;i++)
@@ -205,19 +210,19 @@ bool decode_huffman_data(JPG_DATA &jpg, FILE * const fp)
     // initialization
     decode_init(jpg);
     // now we can start
-    BitStream strm(1536);
+    BitStream strm(MIN_BUFFER_SIZE*4);
     const int& num_channels=jpg.scan_info.num_channels; // here we refer to scan_info because it's releated to huffman decoding
     coef_t *dc_coef=new coef_t[num_channels];
     memset(dc_coef,0,sizeof(coef_t)*num_channels);
     bool more_data_avail=true;
-    int mcu_idx,ch_idx,blk_idx,overall_idx=0;
+    int mcu_idx,ch_idx,blk_idx,overall_block_idx=0;
     for (mcu_idx=0;mcu_idx<jpg.mcu_count;mcu_idx++)
     {
         for (ch_idx=0;ch_idx<num_channels;ch_idx++)
         {
             if ((mcu_idx>0 || ch_idx>0) && strm.eof())
             {
-                printf("[X] data incomplete. (%d/%d mcu)\n",mcu_idx,jpg.mcu_count);
+                printf("[X] data incomplete or buffer too small. (%d/%d mcu)\n",mcu_idx,jpg.mcu_count);
                 return false;
             }
             for (blk_idx=0;blk_idx<jpg.blks_per_mcu[ch_idx];blk_idx++)
@@ -239,7 +244,7 @@ bool decode_huffman_data(JPG_DATA &jpg, FILE * const fp)
                 }
                 else
                 {
-                    memcpy(&jpg.mcu_data[overall_idx++],mat,sizeof(mat));
+                    memcpy(&jpg.mcu_data[overall_block_idx++],mat,sizeof(mat));
                 }
             }
         }
@@ -284,25 +289,127 @@ void zigzag_init(int *table)
     assert(table[n-1]==n-1);
 }
 
+uint32_t YUV_to_RGB32(coef_t Y, coef_t U, coef_t V)
+{
+    return RGBClamp32(Y+1.402*V+128,Y-0.34414*U-0.71414*V+128,Y+1.772*U+128);
+}
+
 bool decode_mcu_data(JPG_DATA &jpg, FILE * const fp)
 {
-    // iterating MCUs
-    int idx=0;
-    for (int i=0;i<jpg.mcu_count;i++)
+    // define bitmap file structures
+    #pragma pack(1)
+    typedef struct tagBITMAPINFOHEADER{
+        uint32_t      biSize;
+        int32_t       biWidth;
+        int32_t       biHeight;
+        uint16_t       biPlanes;
+        uint16_t       biBitCount;
+        uint32_t      biCompression;
+        uint32_t      biSizeImage;
+        uint32_t       biXPelsPerMeter;
+        uint32_t       biYPelsPerMeter;
+        uint32_t      biClrUsed;
+        uint32_t      biClrImportant;
+    } BITMAPINFOHEADER, * LPBITMAPINFOHEADER,*PBITMAPINFOHEADER;
+
+    typedef struct tagBITMAPFILEHEADER {
+        uint16_t    bfType;
+        uint32_t   bfSize;
+        uint16_t    bfReserved1;
+        uint16_t    bfReserved2;
+        uint32_t   bfOffBits;
+    }  BITMAPFILEHEADER,  * LPBITMAPFILEHEADER,*PBITMAPFILEHEADER;
+    #pragma pack()
+    // creating bmp file
+    FILE *bmp=fopen("m:\\output.bmp","wb");
+    BITMAPINFOHEADER bi={0};
+    BITMAPFILEHEADER bf={0};
+    bi.biSize=sizeof(BITMAPINFOHEADER);
+	bi.biWidth=jpg.frame_info.img_width;
+	bi.biHeight=-jpg.frame_info.img_height;
+	bi.biPlanes=1;
+	bi.biBitCount=32;
+	bi.biClrUsed=0;
+	bi.biClrImportant=0;
+	bi.biCompression=0; // BI_RGB
+	bf.bfType=0x4d42;
+	bf.bfSize=sizeof(BITMAPFILEHEADER)+sizeof(BITMAPINFOHEADER)+bi.biWidth*abs(bi.biHeight)*4;
+	bf.bfOffBits=sizeof(BITMAPFILEHEADER)+sizeof(BITMAPINFOHEADER);
+	assert(bf.bfOffBits==54);
+	fwrite(&bf,sizeof(bf),1,bmp);
+	fwrite(&bi,sizeof(bi),1,bmp);
+    // allocating memory space
+    uint32_t **mcu_scanline=new uint32_t*[jpg.mcu_height];
+    for (int i=0;i<jpg.mcu_height;i++)
     {
-        for (int j=0;j<jpg.frame_info.num_channels;j++)
+        mcu_scanline[i]=new uint32_t[jpg.mcu_width*jpg.mcu_count_w]; // possibly larger than real width
+    }
+    coef_t (*mat)[64]=new coef_t[jpg.tot_blks_per_mcu][64];
+    // initializing
+    const int sample_Y_h=jpg.frame_info.channel_info[0].sampling_factor>>4;
+    const int sample_Y_v=jpg.frame_info.channel_info[0].sampling_factor&0xF;
+    const int sample_Y_n=sample_Y_h*sample_Y_v;
+    const int sample_U_h=jpg.frame_info.channel_info[1].sampling_factor>>4;
+    const int sample_U_v=jpg.frame_info.channel_info[1].sampling_factor&0xF;
+    const int sample_V_h=jpg.frame_info.channel_info[2].sampling_factor>>4;
+    const int sample_V_v=jpg.frame_info.channel_info[2].sampling_factor&0xF;
+    const int sample_YU_h=sample_Y_h/sample_U_h;
+    const int sample_YU_v=sample_Y_v/sample_U_v;
+    const int sample_YV_h=sample_Y_h/sample_V_h;
+    const int sample_YV_v=sample_Y_v/sample_V_v;
+    // iterating MCUs
+    int overall_block_idx=0;
+    for (int my=0;my<jpg.mcu_count_h;my++)
+    {
+        for (int mx=0;mx<jpg.mcu_count_w;mx++)
         {
-            const coef_t * const qt=jpg.quantization_table[jpg.frame_info.channel_info[j].quant_tbl_id];
-            for (int k=0;k<jpg.blks_per_mcu[j];k++)
+            int block_idx=0;
+            for (int ch=0;ch<jpg.frame_info.num_channels;ch++)
             {
-                coef_t mat[64];
-                for (int p=0;p<64;p++)
+                const coef_t * const qt=jpg.quantization_table[jpg.frame_info.channel_info[ch].quant_tbl_id];
+                for (int k=0;k<jpg.blks_per_mcu[ch];k++)
                 {
-                    mat[zigzag_table[p]]=jpg.mcu_data[idx][p]*qt[p]; // zig-zag & inverse quantizatize
+                    for (int pos=0;pos<64;pos++)
+                    {
+                        mat[block_idx][zigzag_table[pos]]=jpg.mcu_data[overall_block_idx][pos]*qt[pos]; // zig-zag & inverse quantizatize
+                    }
+                    Fast_IDCT(mat[block_idx]);
+                    block_idx++;
+                    overall_block_idx++;
                 }
-                idx++;
+            }
+            // perform color space conversion block by block
+            if (jpg.blks_per_mcu[1]==1 && jpg.blks_per_mcu[2]==1)
+            {
+                // WARNING: the following code only works in ?:1:1 mode
+                for (int y=0;y<jpg.mcu_height;y++)
+                {
+                    for (int x=0;x<jpg.mcu_width;x++)
+                    {
+                        int Y=mat[(y>>3)*sample_Y_h+(x>>3)][((y&7)<<3)|(x&7)];
+                        int U=mat[sample_Y_n][((y/sample_YU_v)<<3)+x/sample_YU_h];
+                        int V=mat[sample_Y_n+1][((y/sample_YV_v)<<3)+x/sample_YV_h];
+                        mcu_scanline[y][x+mx*jpg.mcu_width]=YUV_to_RGB32(Y,U,V);
+                    }
+                }
+            }else
+            {
+                printf("[X] Unsupported color space.\n");
+                goto failed;
             }
         }
+        // write scanline
+        for (int i=0;i<jpg.mcu_height;i++)
+            fwrite(mcu_scanline[i],sizeof(uint32_t),jpg.frame_info.img_width,bmp);
     }
-    return false;
+    goto finished;
+failed:
+
+finished:
+    // clean
+    fclose(bmp);
+    for (int i=0;i<jpg.mcu_height;i++)
+        delete[] mcu_scanline[i];
+    delete[] mcu_scanline;
+    return overall_block_idx==jpg.mcu_count*jpg.tot_blks_per_mcu;
 }

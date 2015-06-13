@@ -191,7 +191,7 @@ datacorrupted:
             printf("[X] Data of Huffman Table #%u is corrupted.\n",id);
             return false;
         }
-        assert(countByLength[0]==0); // true in most cases
+        // assert(countByLength[0]==0); // true in most cases
         printf("[ ] Huffman Table #%u Data:",id);
         for (int i=1;i<=16;i++)
         {
@@ -242,7 +242,7 @@ invalidtree:
                         curCodeWord[curCodeWordLen]='0';
                         curCodeWord[curCodeWordLen+1]=0;
                     }while (++curCodeWordLen<=16 && countByLength[curCodeWordLen-1]==0);
-                    if (curCodeWordLen>=16) goto invalidtree;
+                    if (curCodeWordLen>16) goto invalidtree;
                 }
                 --countByLength[curCodeWordLen-1];
 
