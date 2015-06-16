@@ -123,13 +123,17 @@ public:
 
     HuffmanTree():mRoot(NULL)
     {
+        calc_lg2();
     }
 
     // import huffman table
     HuffmanTree(const char* const* code, const DataType* val, const size_t num):mRoot(NULL)
     {
+        calc_lg2();
         for (size_t i=0;i<num;i++)
+        {
             addCode(code[i],strlen(code[i]),val[i]);
+        }
     }
 
     ~HuffmanTree()
@@ -159,8 +163,16 @@ public:
     {
         mRoot.traverse(firstID-1,preOrder);
     }
-private:
+
+protected:
     NodeType mRoot;
+
+private:
+    unsigned mLg2;
+    void calc_lg2()
+    {
+        for (mLg2=0;(1<<(uint8_t)mLg2)<ary;mLg2++);
+    }
 
     HuffmanTree(const HuffmanTree&) = delete;
     HuffmanTree& operator = (const HuffmanTree&) = delete;
@@ -185,25 +197,22 @@ HuffmanTree<a,T>::addCode(const char * hcode, const size_t hlen, const T& hval)
     assert(strlen(hcode)==hlen);
     assert(hlen>0 && hlen<=32);
 
-    size_t lg2;
-    for (lg2=0;(1<<(uint8_t)lg2)<a;lg2++);
-
     auto *node=&mRoot;
-    for (size_t pos=0;pos<hlen;pos+=lg2)
+    for (size_t pos=0;pos<hlen;pos+=mLg2)
     {
-        if (hlen-pos==lg2) //  the last few digits
+        if (hlen-pos==mLg2) //  the last few digits
         {
-            node=&(node->createLeaf(binToDec(&hcode[pos],lg2),hval,hcode,hlen));
+            node=&(node->createLeaf(binToDec(&hcode[pos],mLg2),hval,hcode,hlen));
         }
-        else if (hlen-pos>lg2)
+        else if (hlen-pos>mLg2)
         {
-            node=&(node->createSubTree(binToDec(&hcode[pos],lg2)));
+            node=&(node->createSubTree(binToDec(&hcode[pos],mLg2)));
         }
         else
         {
             auto &tmpNode=*node;
             int high,low;
-            high=low=binToDec(&hcode[pos],hlen-pos)<<(lg2-(hlen-pos)); // padding with 0s
+            high=low=binToDec(&hcode[pos],hlen-pos)<<(mLg2-(hlen-pos)); // padding with 0s
             high|=(1<<(hlen-pos))-1; // padding with 1s
             vassert(low<high);
 
@@ -222,20 +231,17 @@ template <int a, class T>
 const HuffmanTreeNode<a,T>*
 HuffmanTree<a,T>::findCode(BitStream& strm) const
 {
-    size_t lg2;
-    for (lg2=0;(1<<(uint8_t)lg2)<a;lg2++);
-
     size_t totRead=0;
     const auto *node=&mRoot;
     do
     {
-        uint32_t buf=strm.nextBits(lg2);
-        vassert((buf&(~((1<<lg2)-1)))==0); // validate the result (verbose)
-        totRead+=lg2;
+        uint32_t buf=strm.nextBits(mLg2);
+        vassert((buf&(~((1<<mLg2)-1)))==0); // validate the result (verbose)
+        totRead+=mLg2;
         node=(*node)[buf];
         if (node==NULL) return NULL; // codeword not found
     }while ((!node->isLeaf()));
-    assert(totRead-node->getCodeLength()<lg2);
+    assert(totRead-node->getCodeLength()<mLg2);
 
     // return extra bits
     if (totRead>node->getCodeLength())

@@ -90,7 +90,8 @@ static int inline read_number(BitStream& strm, const uint8_t bits)
     return 0;
 }
 
-static bool read_more_data(BitStream& strm, FILE * const fp, const size_t buffer_size)
+template <size_t buffer_size>
+static bool read_more_data(BitStream& strm, FILE * const fp)
 {
     if (strm.getSize()<buffer_size)
     {
@@ -102,9 +103,10 @@ static bool read_more_data(BitStream& strm, FILE * const fp, const size_t buffer
         // find all 0xFFs in the buffer
         for (size_t left=0;left<tot;left++)
         {
-            const uint8_t* const next_ff=(uint8_t*)memchr(&buffer[left],0xFF,tot-left);
+            const uint8_t* next_ff=(uint8_t*)memchr(&buffer[left],0xFF,tot-left);
             if (next_ff!=NULL)
             {
+check_again:
                 const size_t right=next_ff-&buffer[0];
                 switch (*(next_ff+1))
                 {
@@ -117,9 +119,18 @@ static bool read_more_data(BitStream& strm, FILE * const fp, const size_t buffer
                     fseek(fp,right-tot,SEEK_CUR);
                     return false;
                 case 0xFF: // need to read another byte
-                    vassert(right==tot);
                     strm.append(&buffer[left],next_ff);
                     left=right; // next iteration will start at next_ff+1
+                    if (right==tot-1)
+                    {
+                        // expect one more byte from file
+                        left=tot-1;
+                        next_ff=(uint8_t*)&buffer[tot-1];
+                        if (1==fread(&buffer[tot],1,1,fp))
+                            goto check_again;
+                        else
+                            return false;
+                    }
                     break;
                 default:
                     return false; // error
@@ -131,6 +142,8 @@ static bool read_more_data(BitStream& strm, FILE * const fp, const size_t buffer
                 break;
             }
         }
+
+
     }
     return true;
 }
@@ -209,7 +222,7 @@ static bool decode_huffman_block(BitStream& strm, coef_t& last_dc, coef_t coef[6
 
 bool decode_huffman_data(JPG_DATA &jpg, FILE * const fp)
 {
-    const size_t MIN_BUFFER_SIZE=1024;
+    const size_t MIN_BUFFER_SIZE=2048;
     // create huffman trees
     HufTree* htree[32]={NULL};
     for (uint8_t i=0;i<32;i++)
@@ -239,7 +252,7 @@ bool decode_huffman_data(JPG_DATA &jpg, FILE * const fp)
             {
                 // get more data
                 if (more_data_avail)
-                    more_data_avail=read_more_data(strm,fp,MIN_BUFFER_SIZE);
+                    more_data_avail=read_more_data<MIN_BUFFER_SIZE>(strm,fp);
 
                 // determine which huffman tree to use
                 const auto dc=htree[jpg.scan_info.channel_data[ch_idx].huff_tbl_id>>4];

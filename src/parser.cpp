@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <time.h>
 
 #include "macro.h"
 #include "jpeg.h"
@@ -266,6 +267,7 @@ bool load_jpg(const char *filePath)
         printf("Couldn't open file.\n");
         return false;
     }
+    clock_t timestamp=clock();
     // parse data
     JPG_DATA jpg;
     memset(&jpg,0,sizeof(jpg));
@@ -348,17 +350,28 @@ bool load_jpg(const char *filePath)
             {
                 puts("[ ] file format supported. ready to decode.");
             }
-            // TODO: timing
+
+            printf("Time elapsed for parsing basic info: %ld\n",clock()-timestamp);
+            timestamp=clock();
+
             if (!decode_huffman_data(jpg,fp))
             {
                 puts("[X] decode_huffman_data() failed");
                 goto error;
             }
+
+            printf("Time elapsed for huffman decoding: %ld\n",clock()-timestamp);
+            timestamp=clock();
+
             if (!decode_mcu_data(jpg,fp))
             {
                 puts("[X] decode_mcu_data() failed");
                 goto error;
             }
+
+            printf("Time elapsed for IDCT and color space conversion: %ld\n",clock()-timestamp);
+            timestamp=clock();
+
             puts("[ ] decoding completed.");
             break;
         case 0xDD: // DRI
