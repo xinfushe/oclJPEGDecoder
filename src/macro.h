@@ -128,3 +128,20 @@ T inline abs(T n)
     return n>=0?n:-n;
 }
 #endif // abs
+
+/*
+    GCC compiler can optimize the following code by using native x86 instructions.
+    You can also use the functions in <x86intrin.h> if you like.
+
+    I choose not to use const& here because const& doesn't perform strict type checking for basic types.
+*/
+
+uint16_t inline bswap16(uint16_t& x)
+{
+    return (x>>8)|(x<<8);
+}
+
+uint32_t inline bswap32(uint32_t& x)
+{
+    return (x>>24)|((x&0xFF00)<<8)|((x&0xFF0000)>>8)|((x&0xFF)<<24);
+}

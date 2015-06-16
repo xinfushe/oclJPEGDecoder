@@ -64,7 +64,7 @@ bool is_supported_file(JPG_DATA &jpg)
         jpg.frame_info.channel_info[2].sampling_factor==0x11)
         return true;
 
-    puts("[X] sorry, currently only supports 8-bit YUV 4:2:0 format");
+    puts("[X] sorry, currently only supports 8-bit YUV 4:2:0 or 4:4:4 format");
     return false;
 }
 
@@ -97,29 +97,39 @@ static bool read_more_data(BitStream& strm, FILE * const fp, const size_t buffer
         uint8_t buffer[buffer_size+1];
         const size_t tot=fread(buffer,1,buffer_size,fp);
 
+        // for convenience
+        buffer[tot]=0xFF;
+        // find all 0xFFs in the buffer
         for (size_t left=0;left<tot;left++)
         {
-            size_t right;
-            // TODO: use memchr()
-            for (right=left;right<tot && buffer[right]!=0xFF;right++);
-            if (right<tot)
+            const uint8_t* const next_ff=(uint8_t*)memchr(&buffer[left],0xFF,tot-left);
+            if (next_ff!=NULL)
             {
-                if (buffer[right+1]==0)
-                    strm.append(&buffer[left],right-left+1);
-                else if (buffer[right+1]==0xD9)
+                const size_t right=next_ff-&buffer[0];
+                switch (*(next_ff+1))
                 {
-                    if (left<right) strm.append(&buffer[left],right-left);
+                case 0: // produce a 0xFF byte
+                    strm.append(&buffer[left],next_ff+1);
+                    left=right+1;
+                    break;
+                case 0xD9: // EOI
+                    strm.append(&buffer[left],next_ff);
                     fseek(fp,right-tot,SEEK_CUR);
-                    return false; // eoi
-                }
-                else
+                    return false;
+                case 0xFF: // need to read another byte
+                    vassert(right==tot);
+                    strm.append(&buffer[left],next_ff);
+                    left=right; // next iteration will start at next_ff+1
+                    break;
+                default:
                     return false; // error
+                }
             }else
             {
+                // no 0xFF occurred
                 strm.append(&buffer[left],tot-left);
                 break;
             }
-            left=right+1;
         }
     }
     return true;
@@ -258,35 +268,6 @@ finished:
         if (htree[i]!=NULL)
             delete htree[i];
     return mcu_idx==jpg.mcu_count;
-}
-
-template <int rows, int cols>
-void zigzag_init(int *table)
-{
-    const int n=rows*cols;
-    int cur_x=0,cur_y=0;
-    int dx=1,dy=-1; // upper-right direction
-    for (int i=0;i<n;i++)
-    {
-        table[i]=cur_y*cols+cur_x;
-        if (out_of_map<rows,cols>(cur_x+dx,cur_y+dy))
-        {
-            if (cur_x<cols-1 && cur_y<rows-1)
-            {
-                if (dx>0) cur_x++;else cur_y++;
-            }else
-            {
-                if (dx<0) cur_x++;else cur_y++;
-            }
-            // change direction
-            dx=-dx;dy=-dy;
-        }else
-        {
-            cur_x+=dx;
-            cur_y+=dy;
-        }
-    }
-    assert(table[n-1]==n-1);
 }
 
 uint32_t YUV_to_RGB32(coef_t Y, coef_t U, coef_t V)

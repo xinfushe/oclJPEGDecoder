@@ -192,6 +192,11 @@ public:
     }
 
     size_t append(const uint8_t * src, const size_t len);
+    size_t append(const uint8_t * begin, const uint8_t * end)
+    {
+        // note that the byte at END is not included
+        return append(begin,end-begin);
+    }
 
     void load(const uint8_t * data, const size_t len)
     {
@@ -291,9 +296,7 @@ private:
 
     uint32_t front9b(const uint8_t numBits) const
     {
-        // TODO: speed up
-        uint32_t tmp=mBitReservoir[mBytePos];
-        tmp=(tmp<<8)|mBitReservoir[mBytePos+1];
+        uint16_t tmp=bswap16(*(uint16_t*)&mBitReservoir[mBytePos]);
         tmp&=(1<<(16-mBitPos))-1;
         tmp>>=16-mBitPos-numBits;
         return tmp;
@@ -301,10 +304,7 @@ private:
 
     uint32_t front17b(const uint8_t numBits) const
     {
-        // TODO: speed up
-        uint32_t tmp=mBitReservoir[mBytePos];
-        tmp=(tmp<<8)|mBitReservoir[mBytePos+1];
-        tmp=(tmp<<8)|mBitReservoir[mBytePos+2];
+        uint32_t tmp=bswap32(*(uint32_t*)&mBitReservoir[mBytePos]);
         tmp&=(1<<(24-mBitPos))-1;
         tmp>>=24-mBitPos-numBits;
         return tmp;
@@ -312,11 +312,7 @@ private:
 
     uint32_t front25b(const uint8_t numBits) const
     {
-        // TODO: speed up
-        uint32_t tmp=mBitReservoir[mBytePos];
-        tmp=(tmp<<8)|mBitReservoir[mBytePos+1];
-        tmp=(tmp<<8)|mBitReservoir[mBytePos+2];
-        tmp=(tmp<<8)|mBitReservoir[mBytePos+2];
+        uint32_t tmp=bswap32(*(uint32_t*)&mBitReservoir[mBytePos]);
         tmp&=(1<<(32-mBitPos))-1;
         tmp>>=32-mBitPos-numBits;
         return tmp;

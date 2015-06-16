@@ -6,11 +6,6 @@
 #include "jpeg.h"
 #include "decoder.h"
 
-uint16_t inline bswap(const uint16_t x)
-{
-    return (x>>8)|(x<<8);
-}
-
 bool read_soi(JPG_DATA &jpg, FILE * const strm)
 {
     uint8_t tag[2];
@@ -34,7 +29,7 @@ bool read_app0(JPG_DATA &jpg, FILE * const strm)
     // calculate the size of thumbnail image
     const size_t tn_size=(uint16_t)jpg.app0.thumbnail_width*(uint16_t)jpg.app0.thumbnail_height;
     // validate
-    if (memcmp(jpg.app0.id,"JFIF\0",5) || bswap(jpg.app0.len)!=sizeof(APP0)+tn_size)
+    if (memcmp(jpg.app0.id,"JFIF\0",5) || bswap16(jpg.app0.len)!=sizeof(APP0)+tn_size)
     {
         puts("[X] APP0 is broken.");
         return false;
@@ -120,8 +115,8 @@ bool read_sof(JPG_DATA &jpg, FILE * const strm, size_t len)
     }else
     {
         // fix endianess
-        jpg.frame_info.img_width=bswap(jpg.frame_info.img_width);
-        jpg.frame_info.img_height=bswap(jpg.frame_info.img_height);
+        jpg.frame_info.img_width=bswap16(jpg.frame_info.img_width);
+        jpg.frame_info.img_height=bswap16(jpg.frame_info.img_height);
 
         printf("Dimensions: %u px * %u px\n",jpg.frame_info.img_width,jpg.frame_info.img_height);
         printf("Bit Depth: %u\n",jpg.frame_info.bit_depth);
@@ -288,7 +283,7 @@ bool load_jpg(const char *filePath)
         puts("[X] read_app0() failed");
         goto error;
     }
-    printf("JPEG Version: %04x\n",bswap(jpg.app0.ver));
+    printf("JPEG Version: %04x\n",bswap16(jpg.app0.ver));
     /*
     printf("Resolution: %u * %u\n",bswap(jpg.app0.res_x),bswap(jpg.app0.res_y));
     */
@@ -301,7 +296,7 @@ bool load_jpg(const char *filePath)
         tag[1]=0;
         uint16_t len;
         fread(&len,sizeof(len),1,fp);
-        fseek(fp,bswap(len)-sizeof(len),SEEK_CUR);
+        fseek(fp,bswap16(len)-sizeof(len),SEEK_CUR);
     }
     do
     {
@@ -309,7 +304,7 @@ bool load_jpg(const char *filePath)
         const long start_pos=ftell(fp);
         */
         fread(&len,sizeof(len),1,fp);
-        len=bswap(len)-2;
+        len=bswap16(len)-2;
         switch (tag[1])
         {
         case 0xDB: // DQT
@@ -364,12 +359,14 @@ bool load_jpg(const char *filePath)
                 puts("[X] decode_mcu_data() failed");
                 goto error;
             }
+            puts("[ ] decoding completed.");
             break;
         case 0xDD: // DRI
             puts("[X] DRI is not supported");
             goto error;
             break;
         case 0xD9: // EOI
+            puts("[ ] parsing finished.");
         default:
             tag[1]=0;
             break;
