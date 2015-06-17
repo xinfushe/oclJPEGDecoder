@@ -29,6 +29,13 @@
 
 #define STATIC_ASSERT(expr) sizeof(int[(bool)(expr)?1:-1])
 
+// Print
+#ifdef VERBOSE
+    #define vbprintf printf
+#else
+    #define vbprintf(...) (void)(0)
+#endif // VERBOSE
+
 // Type info
 template <typename T>
 class __BITSOF_CLASS {
@@ -96,6 +103,7 @@ bool inline out_of_map(int x, int y)
 
 uint32_t inline RGBClamp32(int r, int g, int b)
 {
+    //return (r<<16)||(g<<8)|b;
     int32_t ret=0;
     if (b>0)
     {

@@ -376,16 +376,32 @@ bool decode_mcu_data(JPG_DATA &jpg, FILE * const fp)
             if (jpg.blks_per_mcu[1]==1 && jpg.blks_per_mcu[2]==1)
             {
                 // WARNING: the following code only works in ?:1:1 mode
-                for (int y=0;y<jpg.mcu_height;y++)
+                if (jpg.blks_per_mcu[0]==1)
                 {
-                    for (int x=0;x<jpg.mcu_width;x++)
+                    for (int y=0;y<jpg.mcu_height;y++)
                     {
-                        int Y=mat[(y>>3)*sample_Y_h+(x>>3)][((y&7)<<3)|(x&7)];
-                        int U=mat[sample_Y_n][((y/sample_YU_v)<<3)+x/sample_YU_h];
-                        int V=mat[sample_Y_n+1][((y/sample_YV_v)<<3)+x/sample_YV_h];
-                        mcu_scanline[y][x+mx*jpg.mcu_width]=YUV_to_RGB32(Y,U,V);
+                        for (int x=0;x<jpg.mcu_width;x++)
+                        {
+                            int Y=mat[(y>>3)+(x>>3)][((y&7)<<3)|(x&7)];
+                            int U=mat[sample_Y_n][((y)<<3)+x];
+                            int V=mat[sample_Y_n+1][((y)<<3)+x];
+                            mcu_scanline[y][x+mx*jpg.mcu_width]=YUV_to_RGB32(Y,U,V);
+                        }
+                    }
+                }else
+                {
+                    for (int y=0;y<jpg.mcu_height;y++)
+                    {
+                        for (int x=0;x<jpg.mcu_width;x++)
+                        {
+                            int Y=mat[(y>>3)*sample_Y_h+(x>>3)][((y&7)<<3)|(x&7)];
+                            int U=mat[sample_Y_n][((y/sample_YU_v)<<3)+x/sample_YU_h];
+                            int V=mat[sample_Y_n+1][((y/sample_YV_v)<<3)+x/sample_YV_h];
+                            mcu_scanline[y][x+mx*jpg.mcu_width]=YUV_to_RGB32(Y,U,V);
+                        }
                     }
                 }
+
             }else
             {
                 printf("[X] Unsupported color space.\n");
@@ -405,5 +421,6 @@ finished:
     for (int i=0;i<jpg.mcu_height;i++)
         delete[] mcu_scanline[i];
     delete[] mcu_scanline;
+    delete[] mat;
     return overall_block_idx==jpg.mcu_count*jpg.tot_blks_per_mcu;
 }

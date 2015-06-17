@@ -191,7 +191,7 @@ datacorrupted:
         printf("[ ] Huffman Table #%u Data:",id);
         for (int i=1;i<=16;i++)
         {
-            printf(" %02x",countByLength[i-1]);
+            vbprintf(" %02x",countByLength[i-1]);
             assert(countByLength[i-1]<=(1<<i));
             tbl->num_codeword+=countByLength[i-1];
         }
@@ -216,7 +216,7 @@ invalidtree:
             --countByLength[curCodeWordLen-1];
 
             tbl->codeword[0]=strcpy(new char[20],curCodeWord);
-            printf("Codeword %s Value %d\n",tbl->codeword[0],tbl->value[0]);
+            vbprintf("Codeword %s Value %d\n",tbl->codeword[0],tbl->value[0]);
             // generate other codewords
             for (int n=1;n<tbl->num_codeword;n++)
             {
@@ -243,7 +243,7 @@ invalidtree:
                 --countByLength[curCodeWordLen-1];
 
                 tbl->codeword[n]=strcpy(new char[20],curCodeWord);
-                printf("Codeword %s Value %d\n",tbl->codeword[n],tbl->value[n]);
+                vbprintf("Codeword %s Value %d\n",tbl->codeword[n],tbl->value[n]);
             }
             assert(0==countByLength[curCodeWordLen-1]);
         }
