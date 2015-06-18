@@ -69,5 +69,5 @@ struct JPG_DATA
 
     int blks_per_mcu[4]; // Color Component Blocks per MCU
     int tot_blks_per_mcu;
-
+    int blk_count;
 };

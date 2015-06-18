@@ -7,5 +7,10 @@ void idctrow(int * blk);
 void idctcol(int * blk);
 
 int Initialize_OpenCL_IDCT();
+bool clidct_create();
+bool clidct_allocate_memory(const int total_blocks, const int image_width, const int image_height);
+bool clidct_transfer_data_to_device(const int block_data_src[0][64], const int offset, const int count);
+bool clidct_ready();
+bool clidct_clean_up();
 
 #endif // IDCT_H_INCLUDED

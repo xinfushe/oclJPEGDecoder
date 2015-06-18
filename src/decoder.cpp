@@ -1,9 +1,11 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <time.h>
 
 #include "macro.h"
 #include "jpeg.h"
+#include "bmp.h"
 #include "bitstream.h"
 #include "huffman.h"
 #include "zigzag.h"
@@ -142,13 +144,11 @@ check_again:
                 break;
             }
         }
-
-
     }
     return true;
 }
 
-void decode_init(JPG_DATA &jpg)
+bool decode_init(JPG_DATA &jpg)
 {
     const SOF0 &frame=jpg.frame_info;
     jpg.mcu_width=0;
@@ -170,6 +170,7 @@ void decode_init(JPG_DATA &jpg)
     jpg.mcu_count_w=(frame.img_width-1)/jpg.mcu_width+1;
     jpg.mcu_count_h=(frame.img_height-1)/jpg.mcu_height+1;
     jpg.mcu_count=jpg.mcu_count_w*jpg.mcu_count_h;
+    jpg.blk_count=jpg.tot_blks_per_mcu*jpg.mcu_count;
     jpg.mcu_data=new coef_t[jpg.mcu_count*jpg.tot_blks_per_mcu][64];
     static_assert(sizeof(jpg.mcu_data)==sizeof(void*) && \
                   64*sizeof(coef_t)==((char*)&jpg.mcu_data[1][0]-(char*)&jpg.mcu_data[0][0]) && \
@@ -177,6 +178,14 @@ void decode_init(JPG_DATA &jpg)
 
     printf("[ ] %d * %d = %d MCUs in total, %d blocks per MCU.\n",jpg.mcu_count_w,jpg.mcu_count_h,jpg.mcu_count,jpg.tot_blks_per_mcu);
     printf("[ ] MCU Size: %u px * %u px\n",jpg.mcu_width,jpg.mcu_height);
+
+    puts("[C] clidct_create()");
+    if (!clidct_create()) return false;
+
+    puts("[C] clidct_allocate_memory()");
+    if (!clidct_allocate_memory(jpg.blk_count,jpg.frame_info.img_width,jpg.frame_info.img_height)) return false;
+
+    return true;
 }
 
 static bool decode_huffman_block(BitStream& strm, coef_t& last_dc, coef_t coef[64], const HufTree& dc, const HufTree& ac)
@@ -230,8 +239,6 @@ bool decode_huffman_data(JPG_DATA &jpg, FILE * const fp)
         {
             htree[i]=new HufTree(jpg.huffman_table[i]->codeword,jpg.huffman_table[i]->value,jpg.huffman_table[i]->num_codeword);
         }
-    // initialization
-    decode_init(jpg);
     // now we can start
     BitStream strm(MIN_BUFFER_SIZE*4);
     const int& num_channels=jpg.scan_info.num_channels; // here we refer to scan_info because it's releated to huffman decoding
@@ -248,6 +255,7 @@ bool decode_huffman_data(JPG_DATA &jpg, FILE * const fp)
                 printf("[X] data incomplete or buffer too small. (%d/%d mcu)\n",mcu_idx,jpg.mcu_count);
                 return false;
             }
+            const coef_t * const qt=jpg.quantization_table[jpg.frame_info.channel_info[ch_idx].quant_tbl_id];
             for (blk_idx=0;blk_idx<jpg.blks_per_mcu[ch_idx];blk_idx++)
             {
                 // get more data
@@ -260,6 +268,7 @@ bool decode_huffman_data(JPG_DATA &jpg, FILE * const fp)
                 vassert(dc!=NULL && ac!=NULL);
 
                 coef_t mat[64]={0};
+                coef_t zziq_mat[64];
                 if (!decode_huffman_block(strm,dc_coef[ch_idx],mat,*dc,*ac))
                 {
                     printf("[X] data corrupted. (%d/%d mcu %d/%d ch %d/%d blk)\n",mcu_idx,jpg.mcu_count,ch_idx,num_channels,blk_idx,jpg.blks_per_mcu[ch_idx]);
@@ -267,7 +276,11 @@ bool decode_huffman_data(JPG_DATA &jpg, FILE * const fp)
                 }
                 else
                 {
-                    memcpy(&jpg.mcu_data[overall_block_idx++],mat,sizeof(mat));
+                    for (int pos=0;pos<64;pos++)
+                    {
+                        zziq_mat[zigzag_table[pos]]=mat[pos]*qt[pos]; // zig-zag & inverse quantizatize
+                    }
+                    memcpy(&jpg.mcu_data[overall_block_idx++],zziq_mat,sizeof(zziq_mat));
                 }
             }
         }
@@ -275,7 +288,15 @@ bool decode_huffman_data(JPG_DATA &jpg, FILE * const fp)
     goto finished;
 corrupted:
 
+    goto cleanup;
 finished:
+    puts("[C] clidct_transfer_data_to_device");
+    clock_t timestamp;
+    timestamp=clock();
+    clidct_transfer_data_to_device(jpg.mcu_data,0,jpg.blk_count);
+    printf("Time elapsed for writing data to device: %ld\n",clock()-timestamp);
+
+cleanup:
     // clean
     for (uint8_t i=0;i<32;i++)
         if (htree[i]!=NULL)
@@ -288,57 +309,47 @@ uint32_t YUV_to_RGB32(coef_t Y, coef_t U, coef_t V)
     return RGBClamp32(Y+1.402*V+128,Y-0.34414*U-0.71414*V+128,Y+1.772*U+128);
 }
 
+FILE* bmp_create(const char* path, const int width, const int height)
+{
+    FILE *bmp=fopen(path,"wb");
+    if (bmp!=NULL)
+    {
+        BITMAPINFOHEADER bi={0};
+        BITMAPFILEHEADER bf={0};
+        bi.biSize=sizeof(BITMAPINFOHEADER);
+        bi.biWidth=width;
+        bi.biHeight=-height;
+        bi.biPlanes=1;
+        bi.biBitCount=32;
+        bi.biClrUsed=0;
+        bi.biClrImportant=0;
+        bi.biCompression=0; // BI_RGB
+        bf.bfType=0x4d42;
+        bf.bfSize=sizeof(BITMAPFILEHEADER)+sizeof(BITMAPINFOHEADER)+bi.biWidth*abs(bi.biHeight)*4;
+        bf.bfOffBits=sizeof(BITMAPFILEHEADER)+sizeof(BITMAPINFOHEADER);
+        assert(bf.bfOffBits==54);
+        fwrite(&bf,sizeof(bf),1,bmp);
+        fwrite(&bi,sizeof(bi),1,bmp);
+    }
+	return bmp;
+}
+
 bool decode_mcu_data(JPG_DATA &jpg, FILE * const fp)
 {
-    // define bitmap file structures
-    #pragma pack(1)
-    typedef struct tagBITMAPINFOHEADER{
-        uint32_t      biSize;
-        int32_t       biWidth;
-        int32_t       biHeight;
-        uint16_t       biPlanes;
-        uint16_t       biBitCount;
-        uint32_t      biCompression;
-        uint32_t      biSizeImage;
-        uint32_t       biXPelsPerMeter;
-        uint32_t       biYPelsPerMeter;
-        uint32_t      biClrUsed;
-        uint32_t      biClrImportant;
-    } BITMAPINFOHEADER, * LPBITMAPINFOHEADER,*PBITMAPINFOHEADER;
-
-    typedef struct tagBITMAPFILEHEADER {
-        uint16_t    bfType;
-        uint32_t   bfSize;
-        uint16_t    bfReserved1;
-        uint16_t    bfReserved2;
-        uint32_t   bfOffBits;
-    }  BITMAPFILEHEADER,  * LPBITMAPFILEHEADER,*PBITMAPFILEHEADER;
-    #pragma pack()
     // creating bmp file
-    FILE *bmp=fopen("m:\\output.bmp","wb");
-    BITMAPINFOHEADER bi={0};
-    BITMAPFILEHEADER bf={0};
-    bi.biSize=sizeof(BITMAPINFOHEADER);
-	bi.biWidth=jpg.frame_info.img_width;
-	bi.biHeight=-jpg.frame_info.img_height;
-	bi.biPlanes=1;
-	bi.biBitCount=32;
-	bi.biClrUsed=0;
-	bi.biClrImportant=0;
-	bi.biCompression=0; // BI_RGB
-	bf.bfType=0x4d42;
-	bf.bfSize=sizeof(BITMAPFILEHEADER)+sizeof(BITMAPINFOHEADER)+bi.biWidth*abs(bi.biHeight)*4;
-	bf.bfOffBits=sizeof(BITMAPFILEHEADER)+sizeof(BITMAPINFOHEADER);
-	assert(bf.bfOffBits==54);
-	fwrite(&bf,sizeof(bf),1,bmp);
-	fwrite(&bi,sizeof(bi),1,bmp);
-    // allocating memory space
+    FILE *bmp=bmp_create("m:\\output.bmp",jpg.frame_info.img_width,jpg.frame_info.img_height);
+
+	// clidct prepare
+    puts("[C] clidct_ready()");
+    clidct_ready();
+
+    // allocating memory
     uint32_t **mcu_scanline=new uint32_t*[jpg.mcu_height];
     for (int i=0;i<jpg.mcu_height;i++)
     {
         mcu_scanline[i]=new uint32_t[jpg.mcu_width*jpg.mcu_count_w]; // possibly larger than real width
     }
-    coef_t (*mat)[64]=new coef_t[jpg.tot_blks_per_mcu][64];
+    /*const*/ coef_t (*mat)[64];
     // initializing
     const int sample_Y_h=jpg.frame_info.channel_info[0].sampling_factor>>4;
     const int sample_Y_v=jpg.frame_info.channel_info[0].sampling_factor&0xF;
@@ -357,20 +368,11 @@ bool decode_mcu_data(JPG_DATA &jpg, FILE * const fp)
     {
         for (int mx=0;mx<jpg.mcu_count_w;mx++)
         {
-            int block_idx=0;
-            for (int ch=0;ch<jpg.frame_info.num_channels;ch++)
+            mat=&jpg.mcu_data[overall_block_idx];
+            for (int blk=0;blk<jpg.tot_blks_per_mcu;blk++)
             {
-                const coef_t * const qt=jpg.quantization_table[jpg.frame_info.channel_info[ch].quant_tbl_id];
-                for (int k=0;k<jpg.blks_per_mcu[ch];k++)
-                {
-                    for (int pos=0;pos<64;pos++)
-                    {
-                        mat[block_idx][zigzag_table[pos]]=jpg.mcu_data[overall_block_idx][pos]*qt[pos]; // zig-zag & inverse quantizatize
-                    }
-                    Fast_IDCT(mat[block_idx]);
-                    block_idx++;
-                    overall_block_idx++;
-                }
+                Fast_IDCT(mat[blk]);
+                overall_block_idx++;
             }
             // perform color space conversion block by block
             if (jpg.blks_per_mcu[1]==1 && jpg.blks_per_mcu[2]==1)
@@ -415,12 +417,18 @@ bool decode_mcu_data(JPG_DATA &jpg, FILE * const fp)
     goto finished;
 failed:
 
+    goto cleanup;
 finished:
+
+cleanup:
     // clean
     fclose(bmp);
     for (int i=0;i<jpg.mcu_height;i++)
         delete[] mcu_scanline[i];
     delete[] mcu_scanline;
-    delete[] mat;
+
+    puts("[C] clidct_clean_up()");
+    clidct_clean_up();
+
     return overall_block_idx==jpg.mcu_count*jpg.tot_blks_per_mcu;
 }

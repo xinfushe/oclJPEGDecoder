@@ -350,27 +350,31 @@ bool load_jpg(const char *filePath)
             {
                 puts("[ ] file format supported. ready to decode.");
             }
-
             printf("Time elapsed for parsing basic info: %ld\n",clock()-timestamp);
-            timestamp=clock();
 
+            timestamp=clock();
+            if (!decode_init(jpg))
+            {
+                puts("[X] decoder initialization failed");
+                goto error;
+            }
+            printf("Time elapsed for parsing basic info: %ld\n",clock()-timestamp);
+
+            timestamp=clock();
             if (!decode_huffman_data(jpg,fp))
             {
                 puts("[X] decode_huffman_data() failed");
                 goto error;
             }
-
             printf("Time elapsed for huffman decoding: %ld\n",clock()-timestamp);
-            timestamp=clock();
 
+            timestamp=clock();
             if (!decode_mcu_data(jpg,fp))
             {
                 puts("[X] decode_mcu_data() failed");
                 goto error;
             }
-
             printf("Time elapsed for IDCT and color space conversion: %ld\n",clock()-timestamp);
-            timestamp=clock();
 
             puts("[ ] decoding completed.");
             break;

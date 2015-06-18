@@ -64,6 +64,7 @@
 		</Linker>
 		<Unit filename="bitstream.cpp" />
 		<Unit filename="bitstream.h" />
+		<Unit filename="bmp.h" />
 		<Unit filename="cpuIDCT8x8.cpp" />
 		<Unit filename="decoder.cpp" />
 		<Unit filename="decoder.h" />
