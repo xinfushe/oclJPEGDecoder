@@ -185,6 +185,14 @@ bool decode_init(JPG_DATA &jpg)
     puts("[C] clidct_allocate_memory()");
     if (!clidct_allocate_memory(jpg.blk_count,jpg.frame_info.img_width,jpg.frame_info.img_height)) return false;
 
+    // build cl program
+    puts("[C] clidct_build()");
+    if (!clidct_build())
+    {
+        puts("[X] fatal error: failed to build opencl program. check the source code.");
+        return false;
+    }
+
     return true;
 }
 
@@ -290,7 +298,7 @@ corrupted:
 
     goto cleanup;
 finished:
-    puts("[C] clidct_transfer_data_to_device");
+    puts("[C] clidct_send()");
     clock_t timestamp;
     timestamp=clock();
     clidct_transfer_data_to_device(jpg.mcu_data,0,jpg.blk_count);
@@ -336,13 +344,20 @@ FILE* bmp_create(const char* path, const int width, const int height)
 
 bool decode_mcu_data(JPG_DATA &jpg, FILE * const fp)
 {
+    // run IDCT on GPU
+    clock_t timestamp;
+    timestamp=clock();
+    puts("[C] clidct_run()");
+    if (!clidct_run()) return false;
+    puts("[C] clidct_wait()");
+    if (!clidct_wait_for_completion()) return false;
+    printf("Time elapsed for running the IDCT kernel: %ld\n",clock()-timestamp);
+
+    puts("[C] clidct_recv()");
+    if (!clidct_retrieve_data_from_device(jpg.mcu_data)) return false;
+
     // creating bmp file
     FILE *bmp=bmp_create("m:\\output.bmp",jpg.frame_info.img_width,jpg.frame_info.img_height);
-
-	// clidct prepare
-    puts("[C] clidct_ready()");
-    clidct_ready();
-
     // allocating memory
     uint32_t **mcu_scanline=new uint32_t*[jpg.mcu_height];
     for (int i=0;i<jpg.mcu_height;i++)
@@ -362,7 +377,7 @@ bool decode_mcu_data(JPG_DATA &jpg, FILE * const fp)
     const int sample_YU_v=sample_Y_v/sample_U_v;
     const int sample_YV_h=sample_Y_h/sample_V_h;
     const int sample_YV_v=sample_Y_v/sample_V_v;
-    // iterating MCUs
+    // iterating through MCUs
     int overall_block_idx=0;
     for (int my=0;my<jpg.mcu_count_h;my++)
     {
@@ -371,7 +386,7 @@ bool decode_mcu_data(JPG_DATA &jpg, FILE * const fp)
             mat=&jpg.mcu_data[overall_block_idx];
             for (int blk=0;blk<jpg.tot_blks_per_mcu;blk++)
             {
-                Fast_IDCT(mat[blk]);
+                //Fast_IDCT(mat[blk]);
                 overall_block_idx++;
             }
             // perform color space conversion block by block

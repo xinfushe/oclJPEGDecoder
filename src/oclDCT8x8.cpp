@@ -8,10 +8,13 @@
 #include "idct.h"
 
 const size_t BLOCK_SIZE=sizeof(int)*64;
+const size_t WORK_SIZE[]={512};
 
 cl_device_id sel_device;
 cl_context g_context;
 cl_command_queue g_commandq;
+cl_program g_program;
+cl_kernel g_entry;
 cl_mem g_block_data;
 int g_block_count;
 
@@ -86,7 +89,8 @@ bool clidct_create()
         return false;
     }
     g_commandq=clCreateCommandQueue(g_context,sel_device,0,&err);
-    if (err != CL_SUCCESS) {
+    if (err != CL_SUCCESS)
+    {
         fprintf(stderr, "clCreateCommandQueue failed (error %d)\n", err);
         return false;
     }
@@ -97,7 +101,8 @@ bool clidct_allocate_memory(const int total_blocks, const int image_width, const
 {
     cl_int err;
     g_block_data=clCreateBuffer(g_context,CL_MEM_READ_WRITE,BLOCK_SIZE*total_blocks,NULL,&err);
-    if (err != CL_SUCCESS) {
+    if (err != CL_SUCCESS)
+    {
         fprintf(stderr, "clCreateBuffer failed (error %d)\n", err);
         return false;
     }
@@ -110,9 +115,11 @@ bool clidct_transfer_data_to_device(const int block_data_src[0][64], const int o
     assert(offset+count<=g_block_count);
     cl_int err;
     size_t write_size;
+
     write_size=BLOCK_SIZE*count;
     err=clEnqueueWriteBuffer(g_commandq,g_block_data,CL_TRUE,0,write_size,block_data_src,0,NULL,NULL);
-    if (err != CL_SUCCESS) {
+    if (err != CL_SUCCESS)
+    {
         fprintf(stderr, "clEnqueueWriteBuffer failed (error %d)\n", err);
         return false;
     }else
@@ -123,29 +130,111 @@ bool clidct_transfer_data_to_device(const int block_data_src[0][64], const int o
     return true;
 }
 
-bool clidct_ready()
+bool clidct_retrieve_data_from_device(int block_data_dest[0][64])
 {
-    // TODO: create program
+    cl_int err;
+    size_t read_size;
+
+    read_size=BLOCK_SIZE*g_block_count;
+    err=clEnqueueReadBuffer(g_commandq,g_block_data,CL_TRUE,0,read_size,block_data_dest,0,NULL,NULL);
+    if (err != CL_SUCCESS)
+    {
+        fprintf(stderr, "clEnqueueReadBuffer failed (error %d)\n", err);
+        return false;
+    }else
+    {
+        printf("[ ] Retrieving %u bytes from device...\n",read_size);
+    }
+    clFinish(g_commandq);
+    return true;
+}
+
+bool clidct_build()
+{
+    FILE *src=fopen("idct8x8.cl","rb");
+    if (src!=NULL)
+    {
+        // get the file size
+        fseek(src,0,SEEK_END);
+        long len=ftell(src);
+        rewind(src);
+
+        char* code=new char[len+1];
+        code[len]=0;
+        int ret=fread(code,len,1,src);
+        fclose(src);
+        if (ret==1)
+        {
+            const char* code_str=code;
+            size_t code_len=len;
+            cl_int err;
+            g_program=clCreateProgramWithSource(g_context,1,&code_str,&code_len,&err);
+            ret=0;
+            if (err==CL_SUCCESS)
+            {
+                err=clBuildProgram(g_program,1,&sel_device,"-Werror",NULL,NULL);
+                if (err==CL_SUCCESS)
+                {
+                    g_entry=clCreateKernel(g_program,"batch_idct",&err);
+                    if (err==CL_SUCCESS)
+                    {
+                        ret=1;
+                    }else
+                        fprintf(stderr, "clCreateKernel failed (error %d)\n", err);
+                }else
+                {
+                    size_t length;
+                    char buffer[2048];
+                    clGetProgramBuildInfo(g_program, sel_device, CL_PROGRAM_BUILD_LOG, sizeof(buffer), buffer, &length);
+                    fprintf(stderr, "clBuildProgram failed (error %d %s)\n", err, buffer);
+                }
+            }
+            else
+                fprintf(stderr, "clCreateProgramWithSource failed (error %d)\n", err);
+        }
+        delete []code;
+        return ret==1;
+    }
     return false;
 }
 
 bool clidct_run()
 {
-    return false;
+    cl_int err;
+    // set execution arguments
+    err=clSetKernelArg(g_entry,0,sizeof(cl_mem),&g_block_data);
+    err|=clSetKernelArg(g_entry,1,sizeof(unsigned int),&g_block_count);
+    if (err!=CL_SUCCESS)
+    {
+        fprintf(stderr, "clSetKernelArg failed (error %d)\n", err);
+        return false;
+    }
+    err=clEnqueueNDRangeKernel(g_commandq,g_entry,COUNT_OF(WORK_SIZE),NULL,&WORK_SIZE[0],NULL,0,NULL,NULL);
+    if (err!=CL_SUCCESS)
+    {
+        fprintf(stderr, "clEnqueueNDRangeKernel failed (error %d)\n", err);
+        return false;
+    }
+    return true;
 }
 
 bool clidct_wait_for_completion()
 {
-    return false;
-}
-
-bool clidct_retrieve_data_from_device(int* mcu_data_dest)
-{
-    return false;
+    return CL_SUCCESS==clFinish(g_commandq);
 }
 
 bool clidct_clean_up()
 {
+    if (g_entry)
+    {
+        clReleaseKernel(g_entry);
+        g_entry=0;
+    }
+    if (g_program)
+    {
+        clReleaseProgram(g_program);
+        g_program=0;
+    }
     if (g_block_data)
     {
         clReleaseMemObject(g_block_data);
