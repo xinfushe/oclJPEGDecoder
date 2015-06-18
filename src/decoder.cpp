@@ -9,7 +9,7 @@
 #include "zigzag.h"
 #include "idct.h"
 
-const int DEFAULT_ARY=4;
+const int DEFAULT_ARY=16;
 typedef HuffmanTree<DEFAULT_ARY,uint8_t> HufTree;
 
 ZigZag<8,8> zigzag_table;

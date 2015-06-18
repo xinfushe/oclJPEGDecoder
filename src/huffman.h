@@ -213,7 +213,7 @@ HuffmanTree<a,T>::addCode(const char * hcode, const size_t hlen, const T& hval)
             auto &tmpNode=*node;
             int high,low;
             high=low=binToDec(&hcode[pos],hlen-pos)<<(mLg2-(hlen-pos)); // padding with 0s
-            high|=(1<<(hlen-pos))-1; // padding with 1s
+            high|=(1<<(mLg2-(hlen-pos)))-1; // padding with 1s
             vassert(low<high);
 
             node=&(node->createLeaf(low,hval,hcode,hlen));

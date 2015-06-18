@@ -304,9 +304,7 @@ private:
 
     uint32_t front17b(const uint8_t numBits) const
     {
-        uint32_t tmp=mBitReservoir[mBytePos];
-        tmp=(tmp<<8)|mBitReservoir[mBytePos+1];
-        tmp=(tmp<<8)|mBitReservoir[mBytePos+2];
+        uint32_t tmp=bswap32(*(uint32_t*)&mBitReservoir[mBytePos])>>8;
         tmp&=(1<<(24-mBitPos))-1;
         tmp>>=24-mBitPos-numBits;
         return tmp;

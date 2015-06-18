@@ -11,7 +11,7 @@
 				<Option object_output="obj/Debug/" />
 				<Option type="1" />
 				<Option compiler="gcc" />
-				<Option parameters='&quot;C:\Users\Kiro\Pictures\opo0432d.jpg&quot; &quot;C:\Users\Kiro\Pictures\worth_enough_2500.jpg&quot;' />
+				<Option parameters='&quot;C:\Users\Kiro\Pictures\worth_enough_2500.jpg&quot; &quot;C:\Users\Kiro\Pictures\opo0432d.jpg&quot;' />
 				<Compiler>
 					<Add option="-g" />
 				</Compiler>
@@ -56,7 +56,12 @@
 			<Add option="-std=c++11" />
 			<Add option="-Wall" />
 			<Add option="-fexceptions" />
+			<Add directory="%CUDA_PATH%/include" />
 		</Compiler>
+		<Linker>
+			<Add library="OpenCL" />
+			<Add directory="%CUDA_PATH%/lib/Win32" />
+		</Linker>
 		<Unit filename="bitstream.cpp" />
 		<Unit filename="bitstream.h" />
 		<Unit filename="cpuIDCT8x8.cpp" />

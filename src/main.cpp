@@ -25,6 +25,7 @@ int main(int argc, char **argv)
 
     // init IDCT library
     Initialize_Fast_IDCT();
+    Initialize_OpenCL_IDCT();
 
     if (argc<=1)
     {
