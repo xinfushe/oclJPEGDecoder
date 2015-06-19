@@ -177,6 +177,7 @@ bool decode_init(JPG_DATA &jpg)
                   64*sizeof(coef_t)==sizeof(jpg.mcu_data[0]),"inappropratite type");
 
     printf("[ ] %d * %d = %d MCUs in total, %d blocks per MCU.\n",jpg.mcu_count_w,jpg.mcu_count_h,jpg.mcu_count,jpg.tot_blks_per_mcu);
+    printf("[ ] %d blocks in total.\n",jpg.blk_count);
     printf("[ ] MCU Size: %u px * %u px\n",jpg.mcu_width,jpg.mcu_height);
 
     puts("[C] clidct_create()");

@@ -186,7 +186,7 @@ bool clidct_build()
                 }else
                 {
                     size_t length;
-                    char buffer[2048];
+                    static char buffer[20480];
                     clGetProgramBuildInfo(g_program, sel_device, CL_PROGRAM_BUILD_LOG, sizeof(buffer), buffer, &length);
                     fprintf(stderr, "clBuildProgram failed (error %d %s)\n", err, buffer);
                 }
