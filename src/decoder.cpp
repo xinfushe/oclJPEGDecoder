@@ -11,12 +11,14 @@
 #include "zigzag.h"
 #include "idct.h"
 
+//#define USE_CPU_ONLY
+
 const int DEFAULT_ARY=16;
 typedef HuffmanTree<DEFAULT_ARY,uint8_t> HufTree;
 
 ZigZag<8,8> zigzag_table;
 
-bool is_supported_file(JPG_DATA &jpg)
+bool is_supported_file(const JPG_DATA &jpg)
 {
     if (jpg.frame_info.bit_depth!=8)
     {
@@ -165,7 +167,16 @@ bool decode_init(JPG_DATA &jpg)
     }
     jpg.mcu_width*=8;
     jpg.mcu_height*=8;
-    // assert(jpg.mcu_width==16 && jpg.mcu_height==16 && jpg.blks_per_mcu[0]==4 && jpg.blks_per_mcu[1]==1); // only for 4:2:0
+
+    jpg.color_space=Other;
+    if (jpg.frame_info.channel_info[0].sampling_factor==0x22 && \
+        jpg.frame_info.channel_info[1].sampling_factor==0x11 && \
+        jpg.frame_info.channel_info[2].sampling_factor==0x11)
+        jpg.color_space=YUV420;
+    else if (jpg.frame_info.channel_info[0].sampling_factor==0x11 && \
+        jpg.frame_info.channel_info[1].sampling_factor==0x11 && \
+        jpg.frame_info.channel_info[2].sampling_factor==0x11)
+        jpg.color_space=YUV444;
 
     jpg.mcu_count_w=(frame.img_width-1)/jpg.mcu_width+1;
     jpg.mcu_count_h=(frame.img_height-1)/jpg.mcu_height+1;
@@ -180,19 +191,21 @@ bool decode_init(JPG_DATA &jpg)
     printf("[ ] %d blocks in total.\n",jpg.blk_count);
     printf("[ ] MCU Size: %u px * %u px\n",jpg.mcu_width,jpg.mcu_height);
 
-    puts("[C] clidct_create()");
-    if (!clidct_create()) return false;
+    #ifndef USE_CPU_ONLY
+        puts("[C] clidct_create()");
+        if (!clidct_create()) return false;
 
-    puts("[C] clidct_allocate_memory()");
-    if (!clidct_allocate_memory(jpg.blk_count,jpg.frame_info.img_width,jpg.frame_info.img_height)) return false;
+        puts("[C] clidct_allocate_memory()");
+        if (!clidct_allocate_memory(jpg.blk_count,jpg.frame_info.img_width,jpg.frame_info.img_height,jpg.mcu_width,jpg.mcu_height)) return false;
 
-    // build cl program
-    puts("[C] clidct_build()");
-    if (!clidct_build())
-    {
-        puts("[X] fatal error: failed to build opencl program. check the source code.");
-        return false;
-    }
+        // build cl program
+        puts("[C] clidct_build()");
+        if (!clidct_build(jpg.color_space))
+        {
+            puts("[X] fatal error: failed to build opencl program. check the source code.");
+            return false;
+        }
+    #endif
 
     return true;
 }
@@ -299,12 +312,13 @@ corrupted:
 
     goto cleanup;
 finished:
-    puts("[C] clidct_send()");
-    clock_t timestamp;
-    timestamp=clock();
-    clidct_transfer_data_to_device(jpg.mcu_data,0,jpg.blk_count);
-    printf("Time elapsed for writing data to device: %ld\n",clock()-timestamp);
-
+    #ifndef USE_CPU_ONLY
+        puts("[C] clidct_send()");
+        clock_t timestamp;
+        timestamp=clock();
+        clidct_transfer_data_to_device(jpg.mcu_data,0,jpg.blk_count);
+        printf("Time elapsed for writing data to device: %ld\n",clock()-timestamp);
+    #endif
 cleanup:
     // clean
     for (uint8_t i=0;i<32;i++)
@@ -346,18 +360,24 @@ FILE* bmp_create(const char* path, const int width, const int height)
 bool decode_mcu_data(JPG_DATA &jpg, FILE * const fp)
 {
     clock_t timestamp;
-    // run IDCT on GPU
-    timestamp=clock();
-    puts("[C] clidct_run()");
-    if (!clidct_run()) return false;
-    puts("[C] clidct_wait()");
-    if (!clidct_wait_for_completion()) return false;
-    printf("Time elapsed for running the IDCT kernel: %ld\n",clock()-timestamp);
-    // retrieve output (transformed blocks)
-    timestamp=clock();
-    puts("[C] clidct_recv()");
-    if (!clidct_retrieve_data_from_device(jpg.mcu_data)) return false;
-    printf("Time elapsed for reading data from device: %ld\n",clock()-timestamp);
+    char* image_data=NULL;
+    const size_t image_size=(size_t)jpg.frame_info.img_width*(size_t)jpg.frame_info.img_height*4;
+    #ifndef USE_CPU_ONLY
+        // run IDCT on GPU
+        timestamp=clock();
+        puts("[C] clidct_run()");
+        if (!clidct_run(jpg.color_space)) return false;
+        puts("[C] clidct_wait()");
+        if (!clidct_wait_for_completion()) return false;
+        printf("Time elapsed for running the IDCT kernel: %ld\n",clock()-timestamp);
+        // retrieve output (transformed blocks)
+        timestamp=clock();
+        puts("[C] clidct_recv()");
+        image_data=new char[image_size];
+        if (!clidct_retrieve_image_from_device(image_data,jpg.frame_info.img_width,jpg.frame_info.img_height)) return false;
+        // if (!clidct_retrieve_data_from_device(jpg.mcu_data)) return false;
+        printf("Time elapsed for reading data from device: %ld\n",clock()-timestamp);
+    #endif
 
     // creating bmp file
     FILE *bmp=bmp_create("m:\\output.bmp",jpg.frame_info.img_width,jpg.frame_info.img_height);
@@ -367,74 +387,84 @@ bool decode_mcu_data(JPG_DATA &jpg, FILE * const fp)
     {
         mcu_scanline[i]=new uint32_t[jpg.mcu_width*jpg.mcu_count_w]; // possibly larger than real width
     }
-    /*const*/ coef_t (*mat)[64];
-    // initializing
-    const int sample_Y_h=jpg.frame_info.channel_info[0].sampling_factor>>4;
-    const int sample_Y_v=jpg.frame_info.channel_info[0].sampling_factor&0xF;
-    const int sample_Y_n=sample_Y_h*sample_Y_v;
-    const int sample_U_h=jpg.frame_info.channel_info[1].sampling_factor>>4;
-    const int sample_U_v=jpg.frame_info.channel_info[1].sampling_factor&0xF;
-    const int sample_V_h=jpg.frame_info.channel_info[2].sampling_factor>>4;
-    const int sample_V_v=jpg.frame_info.channel_info[2].sampling_factor&0xF;
-    const int sample_YU_h=sample_Y_h/sample_U_h;
-    const int sample_YU_v=sample_Y_v/sample_U_v;
-    const int sample_YV_h=sample_Y_h/sample_V_h;
-    const int sample_YV_v=sample_Y_v/sample_V_v;
-    // iterating through MCUs
+    /*const*/ coef_t (*mat)[64]=NULL;
     int overall_block_idx=0;
-    for (int my=0;my<jpg.mcu_count_h;my++)
-    {
-        for (int mx=0;mx<jpg.mcu_count_w;mx++)
+    #ifdef USE_CPU_ONLY
+        // initializing
+        const int sample_Y_h=jpg.frame_info.channel_info[0].sampling_factor>>4;
+        const int sample_Y_v=jpg.frame_info.channel_info[0].sampling_factor&0xF;
+        const int sample_Y_n=sample_Y_h*sample_Y_v;
+        const int sample_U_h=jpg.frame_info.channel_info[1].sampling_factor>>4;
+        const int sample_U_v=jpg.frame_info.channel_info[1].sampling_factor&0xF;
+        const int sample_V_h=jpg.frame_info.channel_info[2].sampling_factor>>4;
+        const int sample_V_v=jpg.frame_info.channel_info[2].sampling_factor&0xF;
+        const int sample_YU_h=sample_Y_h/sample_U_h;
+        const int sample_YU_v=sample_Y_v/sample_U_v;
+        const int sample_YV_h=sample_Y_h/sample_V_h;
+        const int sample_YV_v=sample_Y_v/sample_V_v;
+        // iterating through MCUs
+        for (int my=0;my<jpg.mcu_count_h;my++)
         {
-            mat=&jpg.mcu_data[overall_block_idx];
-            for (int blk=0;blk<jpg.tot_blks_per_mcu;blk++)
+            for (int mx=0;mx<jpg.mcu_count_w;mx++)
             {
-                //Fast_IDCT(mat[blk]); if idct on CPU
-                overall_block_idx++;
-            }
-            // perform color space conversion block by block
-            if (jpg.blks_per_mcu[1]==1 && jpg.blks_per_mcu[2]==1)
-            {
-                // WARNING: the following code only works in ?:1:1 mode
-                if (jpg.blks_per_mcu[0]==1)
+                mat=&jpg.mcu_data[overall_block_idx];
+                for (int blk=0;blk<jpg.tot_blks_per_mcu;blk++)
                 {
-                    assert(jpg.mcu_width==8 && jpg.mcu_height==8 && sample_Y_n==1);
-                    int pos=0;
-                    for (int y=0;y<jpg.mcu_height;y++)
+                    Fast_IDCT(mat[blk]);
+                    overall_block_idx++;
+                }
+                // perform color space conversion block by block
+                if (jpg.blks_per_mcu[1]==1 && jpg.blks_per_mcu[2]==1)
+                {
+                    // WARNING: the following code only works in ?:1:1 mode
+                    if (jpg.blks_per_mcu[0]==1)
                     {
-                        for (int x=0;x<jpg.mcu_width;x++)
+                        assert(jpg.mcu_width==8 && jpg.mcu_height==8 && sample_Y_n==1);
+                        int pos=0;
+                        for (int y=0;y<jpg.mcu_height;y++)
                         {
-                            int Y=mat[0][pos];
-                            int U=mat[1][pos];
-                            int V=mat[2][pos];
-                            mcu_scanline[y][x+(mx<<3)]=YUV_to_RGB32(Y,U,V);
-                            pos++;
+                            for (int x=0;x<jpg.mcu_width;x++)
+                            {
+                                int Y=mat[0][pos];
+                                int U=mat[1][pos];
+                                int V=mat[2][pos];
+                                mcu_scanline[y][x+(mx<<3)]=YUV_to_RGB32(Y,U,V);
+                                pos++;
+                            }
+                        }
+                    }else
+                    {
+                        for (int y=0;y<jpg.mcu_height;y++)
+                        {
+                            for (int x=0;x<jpg.mcu_width;x++)
+                            {
+                                int Y=mat[(y>>3)*sample_Y_h+(x>>3)][((y&7)<<3)|(x&7)];
+                                int U=mat[sample_Y_n][((y/sample_YU_v)<<3)+x/sample_YU_h];
+                                int V=mat[sample_Y_n+1][((y/sample_YV_v)<<3)+x/sample_YV_h];
+                                mcu_scanline[y][x+mx*jpg.mcu_width]=YUV_to_RGB32(Y,U,V);
+                            }
                         }
                     }
+
                 }else
                 {
-                    for (int y=0;y<jpg.mcu_height;y++)
-                    {
-                        for (int x=0;x<jpg.mcu_width;x++)
-                        {
-                            int Y=mat[(y>>3)*sample_Y_h+(x>>3)][((y&7)<<3)|(x&7)];
-                            int U=mat[sample_Y_n][((y/sample_YU_v)<<3)+x/sample_YU_h];
-                            int V=mat[sample_Y_n+1][((y/sample_YV_v)<<3)+x/sample_YV_h];
-                            mcu_scanline[y][x+mx*jpg.mcu_width]=YUV_to_RGB32(Y,U,V);
-                        }
-                    }
+                    printf("[X] Unsupported color space.\n");
+                    goto failed;
                 }
-
-            }else
-            {
-                printf("[X] Unsupported color space.\n");
-                goto failed;
             }
+            // write scanline
+            for (int i=0;i<jpg.mcu_height;i++)
+                fwrite(mcu_scanline[i],sizeof(uint32_t),jpg.frame_info.img_width,bmp);
         }
-        // write scanline
-        for (int i=0;i<jpg.mcu_height;i++)
-            fwrite(mcu_scanline[i],sizeof(uint32_t),jpg.frame_info.img_width,bmp);
-    }
+    #else
+        // GPU Accelerated
+        if (1!=fwrite(image_data,image_size,1,bmp))
+        {
+            puts("[X] Write file error");
+            goto failed;
+        }
+        overall_block_idx=jpg.blk_count;
+    #endif // USE_CPU_ONLY
     goto finished;
 failed:
 
@@ -447,9 +477,10 @@ cleanup:
     for (int i=0;i<jpg.mcu_height;i++)
         delete[] mcu_scanline[i];
     delete[] mcu_scanline;
-
-    puts("[C] clidct_clean_up()");
-    clidct_clean_up();
-
-    return overall_block_idx==jpg.mcu_count*jpg.tot_blks_per_mcu;
+    if (image_data) delete[] image_data;
+    #ifndef USE_CPU_ONLY
+        puts("[C] clidct_clean_up()");
+        clidct_clean_up();
+    #endif
+    return overall_block_idx==jpg.blk_count;
 }

@@ -60,6 +60,8 @@ struct JPG_DATA
     void *thumbnail;
     SOS scan_info;
 
+    ColorSpace color_space;
+
     int mcu_width; // in pixels
     int mcu_height; // in pixels
     int mcu_count_w;

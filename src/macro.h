@@ -101,6 +101,13 @@ bool inline out_of_map(int x, int y)
     return x<0 || x>=c || y<0 || y>=r;
 }
 
+enum ColorSpace
+{
+    YUV444,
+    YUV420,
+    Other
+};
+
 template <class T>
 uint8_t clamp255(T n)
 {
