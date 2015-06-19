@@ -314,7 +314,7 @@ cleanup:
 
 uint32_t YUV_to_RGB32(coef_t Y, coef_t U, coef_t V)
 {
-    return RGBClamp32(Y+1.402*V+128,Y-0.34414*U-0.71414*V+128,Y+1.772*U+128);
+    return RGBClamp32((int)(Y+1.402*V+128),(int)(Y-0.34414*U-0.71414*V+128),(int)(Y+1.772*U+128));
 }
 
 FILE* bmp_create(const char* path, const int width, const int height)
@@ -344,17 +344,19 @@ FILE* bmp_create(const char* path, const int width, const int height)
 
 bool decode_mcu_data(JPG_DATA &jpg, FILE * const fp)
 {
-    // run IDCT on GPU
     clock_t timestamp;
+    // run IDCT on GPU
     timestamp=clock();
     puts("[C] clidct_run()");
     if (!clidct_run()) return false;
     puts("[C] clidct_wait()");
     if (!clidct_wait_for_completion()) return false;
     printf("Time elapsed for running the IDCT kernel: %ld\n",clock()-timestamp);
-
+    // retrieve output (transformed blocks)
+    timestamp=clock();
     puts("[C] clidct_recv()");
     if (!clidct_retrieve_data_from_device(jpg.mcu_data)) return false;
+    printf("Time elapsed for reading data from device: %ld\n",clock()-timestamp);
 
     // creating bmp file
     FILE *bmp=bmp_create("m:\\output.bmp",jpg.frame_info.img_width,jpg.frame_info.img_height);
@@ -386,7 +388,7 @@ bool decode_mcu_data(JPG_DATA &jpg, FILE * const fp)
             mat=&jpg.mcu_data[overall_block_idx];
             for (int blk=0;blk<jpg.tot_blks_per_mcu;blk++)
             {
-                //Fast_IDCT(mat[blk]);
+                //Fast_IDCT(mat[blk]); if idct on CPU
                 overall_block_idx++;
             }
             // perform color space conversion block by block
@@ -395,14 +397,17 @@ bool decode_mcu_data(JPG_DATA &jpg, FILE * const fp)
                 // WARNING: the following code only works in ?:1:1 mode
                 if (jpg.blks_per_mcu[0]==1)
                 {
+                    assert(jpg.mcu_width==8 && jpg.mcu_height==8 && sample_Y_n==1);
+                    int pos=0;
                     for (int y=0;y<jpg.mcu_height;y++)
                     {
                         for (int x=0;x<jpg.mcu_width;x++)
                         {
-                            int Y=mat[(y>>3)+(x>>3)][((y&7)<<3)|(x&7)];
-                            int U=mat[sample_Y_n][((y)<<3)+x];
-                            int V=mat[sample_Y_n+1][((y)<<3)+x];
-                            mcu_scanline[y][x+mx*jpg.mcu_width]=YUV_to_RGB32(Y,U,V);
+                            int Y=mat[0][pos];
+                            int U=mat[1][pos];
+                            int V=mat[2][pos];
+                            mcu_scanline[y][x+(mx<<3)]=YUV_to_RGB32(Y,U,V);
+                            pos++;
                         }
                     }
                 }else

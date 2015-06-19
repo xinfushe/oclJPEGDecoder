@@ -114,10 +114,11 @@ bool clidct_transfer_data_to_device(const int block_data_src[0][64], const int o
 {
     assert(offset+count<=g_block_count);
     cl_int err;
-    size_t write_size;
-
-    write_size=BLOCK_SIZE*count;
+    size_t write_size=0;
+    // enqueue transfering dct blocks
+    write_size+=BLOCK_SIZE*count;
     err=clEnqueueWriteBuffer(g_commandq,g_block_data,CL_TRUE,0,write_size,block_data_src,0,NULL,NULL);
+    // send
     if (err != CL_SUCCESS)
     {
         fprintf(stderr, "clEnqueueWriteBuffer failed (error %d)\n", err);
@@ -133,10 +134,11 @@ bool clidct_transfer_data_to_device(const int block_data_src[0][64], const int o
 bool clidct_retrieve_data_from_device(int block_data_dest[0][64])
 {
     cl_int err;
-    size_t read_size;
-
-    read_size=BLOCK_SIZE*g_block_count;
+    size_t read_size=0;
+    // enqueue transfering dct blocks
+    read_size+=BLOCK_SIZE*g_block_count;
     err=clEnqueueReadBuffer(g_commandq,g_block_data,CL_TRUE,0,read_size,block_data_dest,0,NULL,NULL);
+    // recv
     if (err != CL_SUCCESS)
     {
         fprintf(stderr, "clEnqueueReadBuffer failed (error %d)\n", err);

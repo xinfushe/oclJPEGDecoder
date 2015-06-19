@@ -358,7 +358,7 @@ bool load_jpg(const char *filePath)
                 puts("[X] decoder initialization failed");
                 goto error;
             }
-            printf("Time elapsed for parsing basic info: %ld\n",clock()-timestamp);
+            printf("Time elapsed for initialization: %ld\n",clock()-timestamp);
 
             timestamp=clock();
             if (!decode_huffman_data(jpg,fp))

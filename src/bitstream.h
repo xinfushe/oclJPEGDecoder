@@ -235,11 +235,8 @@ public:
 
     void moveToNextBit()
     {
-        if (++mBitPos==8)
-        {
-            mBitPos=0;
-            mBytePos++;
-        }
+        // to avoid if branch
+        skipBits(1);
     }
 
     // numBits <= 25
