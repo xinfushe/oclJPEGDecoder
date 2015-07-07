@@ -42,7 +42,7 @@ Release/
 *.userprefs
 
 # Build results
-[Dd]ebug/
+[Dd]ebug*/
 [Dd]ebugPublic/
 [Rr]elease/
 [Rr]eleases/
@@ -235,3 +235,6 @@ FakesAssemblies/
 
 # Visual Studio 6 workspace options file
 *.opt
+
+# Others
+BuildTest/

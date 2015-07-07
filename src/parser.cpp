@@ -1,7 +1,4 @@
-#include <stdio.h>
-#include <stdint.h>
-#include <string.h>
-#include <time.h>
+#include "stdafx.h"
 
 #include "macro.h"
 #include "jpeg.h"

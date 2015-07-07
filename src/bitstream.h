@@ -207,7 +207,7 @@ public:
     // bit streaming
     bool frontBit() const
     {
-        return mBitReservoir[mBytePos]&(1<<(7-mBitPos));
+        return 0!=(mBitReservoir[mBytePos]&(1<<(7-mBitPos)));
     }
 
     uint8_t frontFullByte() const
@@ -244,20 +244,20 @@ public:
     {
         uint32_t tmp;
         vassert(numBits!=0 && numBits<=25);
-        switch (numBits)
-        {
-        case 1:
-            return nextBit();
-        case 2 ... 9: // gcc extenstion
-            tmp=front9b(numBits);
-            break;
-        case 10 ... 17:
-            tmp=front17b(numBits);
-            break;
-        case 18 ... 25:
-            tmp=front25b(numBits);
-            break;
-        }
+		if (numBits == 1)
+			return nextBit();
+		else if (numBits <= 9)
+		{
+			tmp = front9b(numBits);
+		}
+		else if (numBits <= 17)
+		{
+			tmp = front17b(numBits);
+		}
+		else if (numBits <= 25)
+		{
+			tmp = front25b(numBits);
+		}
         skipBits(numBits);
         return tmp;
     }

@@ -1,11 +1,5 @@
 // C Headers
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <math.h>
-#include <time.h>
-#include <string.h>
-
+#include "stdafx.h"
 #include "macro.h"
 #include "bitstream.h"
 #include "huffman.h"
@@ -19,7 +13,7 @@ int main(int argc, char **argv)
     test_bitstream();
     test_huffman();
     #ifdef COMPILE_ONLY
-        puts("tests done.");
+        puts("tests passed.");
         exit(0);
     #endif // COMPILE_ONLY
 

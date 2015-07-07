@@ -1,7 +1,4 @@
-#include <stdio.h>
-#include <stdint.h>
-#include <string.h>
-#include <time.h>
+#include "stdafx.h"
 
 #include "macro.h"
 #include "jpeg.h"
@@ -183,10 +180,10 @@ bool decode_init(JPG_DATA &jpg)
     jpg.mcu_count=jpg.mcu_count_w*jpg.mcu_count_h;
     jpg.blk_count=jpg.tot_blks_per_mcu*jpg.mcu_count;
     jpg.mcu_data=new coef_t[jpg.mcu_count*jpg.tot_blks_per_mcu][64];
-    static_assert(sizeof(jpg.mcu_data)==sizeof(void*) && \
-                  64*sizeof(coef_t)==((char*)&jpg.mcu_data[1][0]-(char*)&jpg.mcu_data[0][0]) && \
-                  64*sizeof(coef_t)==sizeof(jpg.mcu_data[0]),"inappropratite type");
-
+	static_assert(sizeof(jpg.mcu_data) == sizeof(void*) && 64 * sizeof(coef_t) == sizeof(jpg.mcu_data[0]), "inappropratite type");
+#ifdef _MINGW_GCC
+	static_assert(64 * sizeof(coef_t) == ((char*)&jpg.mcu_data[1][0] - (char*)&jpg.mcu_data[0][0]));
+#endif
     printf("[ ] %d * %d = %d MCUs in total, %d blocks per MCU.\n",jpg.mcu_count_w,jpg.mcu_count_h,jpg.mcu_count,jpg.tot_blks_per_mcu);
     printf("[ ] %d blocks in total.\n",jpg.blk_count);
     printf("[ ] MCU Size: %u px * %u px\n",jpg.mcu_width,jpg.mcu_height);

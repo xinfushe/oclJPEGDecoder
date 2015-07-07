@@ -12,6 +12,7 @@ public:
     HuffmanTreeNode(const NodeType * parent):mParent(parent)
     {
         mNumChildren = 0;
+		for (size_t i = 0; i < ary; i++) mChildren[i] = NULL;
     }
 
     // initialize a leaf node
@@ -22,6 +23,7 @@ public:
         mData = data;
         mCode = code;
         mCodeLength = len;
+		for (size_t i = 0; i < ary; i++) mChildren[i] = NULL;
     }
 
     // access to children
@@ -100,7 +102,7 @@ public:
     long traverse(long lastID = -1, const bool preOrder = true) const;
 
 private:
-    NodeType *mChildren[ary]={NULL};
+    NodeType *mChildren[ary];
     int mNumChildren;
     const NodeType * const mParent;
     DataTp mData;

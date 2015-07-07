@@ -1,7 +1,4 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <string.h>
+#include "stdafx.h"
 #include <cl\opencl.h>
 
 #include "macro.h"
@@ -61,7 +58,7 @@ int Initialize_OpenCL_IDCT()
 
                 clGetDeviceInfo(did, CL_DEVICE_NAME, sizeof(dname), dname, NULL);
                 printf("Device #%u: Name: %s\n", j+1, dname);
-                if (strstr(dname, "Quadro") || strstr(dname, "Tesla") || strstr(dname, "Geforce") || strstr(dname, "FirePro") || strstr(dname, "FireStream"))
+                if (strstr(dname, "Quadro") || strstr(dname, "Tesla") || strstr(dname, "Geforce") || strstr(dname, "FirePro") || strstr(dname, "FireStream") || strstr(dname, "Capeverde"))
                 {
                     // choose high-performace gpu automatically
                     sel_device=did;
@@ -146,7 +143,7 @@ bool clidct_allocate_memory(const int total_blocks, const size_t image_width, co
     return true;
 }
 
-bool clidct_transfer_data_to_device(const int block_data_src[0][64], const int offset, const int count)
+bool clidct_transfer_data_to_device(const int block_data_src[1][64], const int offset, const int count)
 {
     assert(offset+count<=g_block_count);
     cl_int err;
@@ -167,7 +164,7 @@ bool clidct_transfer_data_to_device(const int block_data_src[0][64], const int o
     return true;
 }
 
-bool clidct_retrieve_data_from_device(int block_data_dest[0][64])
+bool clidct_retrieve_data_from_device(int block_data_dest[1][64])
 {
     cl_int err;
     size_t read_size=0;

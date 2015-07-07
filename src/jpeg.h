@@ -11,7 +11,7 @@ struct APP0
     uint16_t res_y;
     uint8_t thumbnail_width;
     uint8_t thumbnail_height;
-    uint8_t thumbnail_data[0][3];
+    // uint8_t thumbnail_data[0][3]; // unsupported by Visual C++
 };
 
 struct SOF0

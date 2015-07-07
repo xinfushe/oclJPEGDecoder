@@ -16,14 +16,16 @@
 
 // Assertion
 #ifdef NDEBUG
-    #define assert(e) ((void)0)
-    #define vassert(e) ((void)0)
+    #define assert(e) (0)
+    #define vassert(e) (0)
 #else
-    #define assert(e) if (e) {} else {;__asm volatile("int3");}
-    #ifdef VERBOSE
+	#ifdef MINGW_GCC
+		#define assert(e) if (e) {} else {;__asm volatile("int3");}
+	#endif
+	#ifdef VERBOSE
         #define vassert(e) assert(e)
     #else
-        #define vassert(e) ((void)0)
+        #define vassert(e) (0)
     #endif
 #endif
 
@@ -33,7 +35,7 @@
 #ifdef VERBOSE
     #define vbprintf printf
 #else
-    #define vbprintf(...) (void)(0)
+    #define vbprintf(...) (0)
 #endif // VERBOSE
 
 // Type info
