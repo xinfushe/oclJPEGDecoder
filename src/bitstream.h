@@ -155,11 +155,10 @@ public:
     }
 
     // skip a specified amount of bits
-    void skipBits(const uint8_t deltaBits)
+    void skipBits(const int deltaBits)
     {
-        mBitPos+=deltaBits;
-        mBytePos+=mBitPos>>3;
-        mBitPos&=7;
+		mBytePos += (deltaBits + mBitPos) >> 3;
+        mBitPos = (mBitPos + (deltaBits&7))&7;
     }
 
     void alignToByte()
@@ -167,16 +166,16 @@ public:
         mBitPos=0;
     }
 
-    void backBits(const uint8_t numBits)
+    void backBits(const int numBits)
     {
-        int nPos=mBitPos-(int)numBits;
-        if (nPos<0)
+        const int newPos=mBitPos-numBits;
+        if (newPos<0)
         {
-            mBytePos-=(7-nPos)>>3;
-            mBitPos=nPos&7;
+            mBytePos-=(7-newPos)>>3;
+            mBitPos=newPos&7;
         }else
         {
-            mBitPos=nPos;
+            mBitPos=newPos;
         }
     }
 
@@ -308,12 +307,62 @@ public:
         return &mBitReservoir[mBytePos];
     }
 
+    // cached operations
+    void cacheInit()
+    {
+        mCache=0;
+        mBitsInCache=0;
+    }
+
+    void cacheReset()
+    {
+        assert((mBytePos&3)==0 && (mBitPos==0) && (mBytePos+4<=mEndPos));
+    }
+
+    void cacheReturn()
+    {
+        backBits(mBitsInCache);
+        mBitsInCache=0;
+    }
+
+    // numBits <= 32
+    uint32_t cachedFrontBits(const int numBits)
+    {
+        vassert(numBits<=32);
+        if (mBitsInCache<numBits)
+        {
+            // read in another 32 bits
+            mCache|=((uint64_t)bswap32(*(uint32_t*)&mBitReservoir[mBytePos]))<<(64-32-mBitsInCache);
+            mBitsInCache+=32;
+            mBytePos+=4;
+        }
+        return mCache>>(64-numBits);
+    }
+
+    void cachedSkipBits(const int numBits)
+    {
+        mCache<<=numBits;
+        mBitsInCache-=numBits;
+        vassert(mBitsInCache>=0);
+    }
+
+    uint32_t cachedNextBits(const int numBits)
+    {
+        uint32_t result;
+        result=cachedFrontBits(numBits);
+        cachedSkipBits(numBits);
+        return result;
+    }
+
 private:
     uint8_t* mBitReservoir=NULL;
     size_t mCapacity=0;
     size_t mEndPos;
     size_t mBytePos;
     uint8_t mBitPos;
+
+    uint64_t mCache;
+    int mBitsInCache;
 
     // adjust pointer when eof is reached, and return current window size
     size_t fixPosition()

@@ -85,7 +85,7 @@ static int inline read_number(BitStream& strm, const uint8_t bits)
 {
     if (bits)
     {
-        int value=strm.nextBits(bits);
+        int value=strm.cachedNextBits(bits);
         return convert_number(value,bits);
     }else
     return 0;
@@ -212,7 +212,7 @@ static bool decode_huffman_block(BitStream& strm, coef_t& last_dc, coef_t coef[6
     int count=0;
     int value;
     // read in dc component
-    const auto hnode=dc.findCode(strm);
+    const auto hnode=dc.findCodeInCache(strm);
     if (hnode==NULL) return false;
 
     const auto hval=*hnode;
@@ -224,7 +224,7 @@ static bool decode_huffman_block(BitStream& strm, coef_t& last_dc, coef_t coef[6
     // read in 63 ac components
     while (count<64)
     {
-        const auto hnode=ac.findCode(strm);
+        const auto hnode=ac.findCodeInCache(strm);
         if (hnode==NULL) return false;
 
         const int num_leading_0=(*hnode)>>4;
@@ -258,28 +258,38 @@ bool decode_huffman_data(JPG_DATA &jpg, FILE * const fp)
         {
             htree[i]=new HufTree(jpg.huffman_table[i]->codeword,jpg.huffman_table[i]->value,jpg.huffman_table[i]->num_codeword);
         }
-    // now we can start
+    // init
     BitStream strm(MIN_BUFFER_SIZE*4);
     const int& num_channels=jpg.scan_info.num_channels; // here we refer to scan_info because it's releated to huffman decoding
+    bool not_eof=true;
+    int mcu_idx,ch_idx,blk_idx,overall_block_idx=0;
+    // allocate memory for DC coeffs
     coef_t *dc_coef=new coef_t[num_channels];
     memset(dc_coef,0,sizeof(coef_t)*num_channels);
-    bool more_data_avail=true;
-    int mcu_idx,ch_idx,blk_idx,overall_block_idx=0;
+    // init streaming cache
+    strm.cacheInit();
+    // now we can start
     for (mcu_idx=0;mcu_idx<jpg.mcu_count;mcu_idx++)
     {
         for (ch_idx=0;ch_idx<num_channels;ch_idx++)
         {
             if ((mcu_idx>0 || ch_idx>0) && strm.eof())
             {
-                printf("[X] data incomplete or buffer too small. (%d/%d mcu)\n",mcu_idx,jpg.mcu_count);
-                return false;
+                strm.cacheReturn();
+                if (strm.eof())
+                {
+                    printf("[X] data incomplete or buffer too small. (%d/%d mcu)\n",mcu_idx,jpg.mcu_count);
+                    return false;
+                }
             }
             const coef_t * const qt=jpg.quantization_table[jpg.frame_info.channel_info[ch_idx].quant_tbl_id];
             for (blk_idx=0;blk_idx<jpg.blks_per_mcu[ch_idx];blk_idx++)
             {
-                // get more data
-                if (more_data_avail)
-                    more_data_avail=read_more_data<MIN_BUFFER_SIZE>(strm,fp);
+                // get more data from file
+                if (not_eof)
+                {
+                    not_eof=read_more_data<MIN_BUFFER_SIZE>(strm,fp);
+                }
 
                 // determine which huffman tree to use
                 const auto dc=htree[jpg.scan_info.channel_data[ch_idx].huff_tbl_id>>4];

@@ -8,6 +8,12 @@
     #endif
 #endif
 
+#ifdef __GNUC__
+    #define DUMMYSTATEMENT (void)(0)
+#else
+    #define DUMMYSTATEMENT (0)
+#endif // __GNUC__
+
 // Replace NULL with nullptr
 #ifdef NULL
     #undef NULL
@@ -16,16 +22,18 @@
 
 // Assertion
 #ifdef NDEBUG
-    #define assert(e) (0)
-    #define vassert(e) (0)
+	#ifdef __GNUC__
+		#define assert(e) DUMMYSTATEMENT
+	#endif
+    #define vassert(e) DUMMYSTATEMENT
 #else
-	#ifdef MINGW_GCC
+	#ifdef __GNUC__
 		#define assert(e) if (e) {} else {;__asm volatile("int3");}
 	#endif
 	#ifdef VERBOSE
         #define vassert(e) assert(e)
     #else
-        #define vassert(e) (0)
+        #define vassert(e) DUMMYSTATEMENT
     #endif
 #endif
 
@@ -35,7 +43,7 @@
 #ifdef VERBOSE
     #define vbprintf printf
 #else
-    #define vbprintf(...) (0)
+    #define vbprintf(...) DUMMYSTATEMENT
 #endif // VERBOSE
 
 // Type info

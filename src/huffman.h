@@ -120,7 +120,7 @@ public:
     enum
     {
         // Template argument Ary must be power of 2.
-        __ARY_CHECK=STATIC_ASSERT(ary>=2 && ary<=16 && (ary&(ary-1))==0)
+        __ARY_CHECK=STATIC_ASSERT(ary>=2 && ary<=256 && (ary&(ary-1))==0)
     };
 
     HuffmanTree():mRoot(NULL)
@@ -152,6 +152,9 @@ public:
     void addCode(const char * hcode, const size_t hlen, const DataType& hval);
 
     const NodeType* findCode(BitStream& strm) const;
+
+    // cached version
+    const NodeType* findCodeInCache(BitStream& strm) const;
 
     const DataType& operator [](const char * hcode) const
     {
@@ -235,7 +238,7 @@ template <int a, class T>
 const HuffmanTreeNode<a,T>*
 HuffmanTree<a,T>::findCode(BitStream& strm) const
 {
-	const int NUM_BITS_READ_ONCE = 25;
+	const size_t NUM_BITS_READ_ONCE = 25;
     size_t count=0, totRead=0;
 	uint32_t buf;
     const auto *node=&mRoot;
@@ -264,10 +267,49 @@ HuffmanTree<a,T>::findCode(BitStream& strm) const
 			strm.skipBits(count);
 			return NULL; // codeword not found
 		}
-    }while ((!node->isLeaf()));
+    }while (!node->isLeaf());
 
 	count -= totRead + count - node->getCodeLength();
 	strm.skipBits(count);
+    return node;
+}
+
+template <int a, class T>
+const HuffmanTreeNode<a,T>*
+HuffmanTree<a,T>::findCodeInCache(BitStream& strm) const
+{
+	const size_t NUM_BITS_READ_ONCE = 16;
+    size_t count=0, totRead=0;
+	uint32_t buf;
+    const auto *node=&mRoot;
+	// first read
+	buf = strm.cachedFrontBits(NUM_BITS_READ_ONCE) << (32 - NUM_BITS_READ_ONCE);
+    do
+    {
+		if (count + mLg2 > NUM_BITS_READ_ONCE)
+		{
+			// drop buffer
+			strm.cachedSkipBits(count);
+			totRead += count;
+			count = 0;
+			// refill
+			buf = strm.cachedFrontBits(NUM_BITS_READ_ONCE) << (32 - NUM_BITS_READ_ONCE);
+		}
+		// take mLg2 bits from the buffer
+		const uint32_t child = buf >> (32 - mLg2);
+		count += mLg2;
+		buf <<= mLg2;
+		// goto children
+        node=(*node)[child];
+		if (node == NULL)
+		{
+			strm.cachedSkipBits(count);
+			return NULL; // codeword not found
+		}
+    }while (!node->isLeaf());
+    // return extra bits
+	count -= totRead + count - node->getCodeLength();
+	strm.cachedSkipBits(count);
     return node;
 }
 

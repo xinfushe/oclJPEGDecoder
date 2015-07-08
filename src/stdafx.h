@@ -5,9 +5,11 @@
 
 #pragma once
 
-#include "targetver.h"
+#ifndef __GNUC__
+    #include "targetver.h"
 
-#define _CRT_SECURE_NO_WARNINGS
+    #define _CRT_SECURE_NO_WARNINGS
+#endif
 
 #include <stdio.h>
 #include <tchar.h>
@@ -16,7 +18,7 @@
 #include <math.h>
 #include <time.h>
 #include <string.h>
-#ifndef _MINGW_GCC
+#ifndef __GNUC__
 	#include <assert.h>
 #endif
 
