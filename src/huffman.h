@@ -174,6 +174,8 @@ private:
     void calc_lg2()
     {
         for (mLg2=0;(1<<(uint8_t)mLg2)<ary;mLg2++);
+		assert(mLg2 <= 9);
+		assert(1 << mLg2 == ary);
     }
 
     HuffmanTree(const HuffmanTree&) = delete;
@@ -233,21 +235,39 @@ template <int a, class T>
 const HuffmanTreeNode<a,T>*
 HuffmanTree<a,T>::findCode(BitStream& strm) const
 {
-    size_t totRead=0;
+	const int NUM_BITS_READ_ONCE = 25;
+    size_t count=0, totRead=0;
+	uint32_t buf;
     const auto *node=&mRoot;
+	// first read
+	buf = strm.front25b(NUM_BITS_READ_ONCE) << (32 - NUM_BITS_READ_ONCE);
+
     do
     {
-        uint32_t buf=strm.nextBits(mLg2);
-        vassert((buf&(~((1<<mLg2)-1)))==0); // validate the result (verbose)
-        totRead+=mLg2;
-        node=(*node)[buf];
-        if (node==NULL) return NULL; // codeword not found
+		if (count + mLg2 > NUM_BITS_READ_ONCE)
+		{
+			// drop buffer
+			strm.skipBits(count);
+			totRead += count;
+			count = 0;
+			// refill
+			buf = strm.front25b(NUM_BITS_READ_ONCE) << (32 - NUM_BITS_READ_ONCE);
+		}
+		// take mLg2 bits from the buffer
+		const uint32_t child = buf >> (32 - mLg2);
+		count += mLg2;
+		buf <<= mLg2;
+		// goto children
+        node=(*node)[child];
+		if (node == NULL)
+		{
+			strm.skipBits(count);
+			return NULL; // codeword not found
+		}
     }while ((!node->isLeaf()));
-    assert(totRead-node->getCodeLength()<mLg2);
 
-    // return extra bits
-    if (totRead>node->getCodeLength())
-        strm.backBits(totRead-node->getCodeLength());
+	count -= totRead + count - node->getCodeLength();
+	strm.skipBits(count);
     return node;
 }
 

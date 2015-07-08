@@ -215,6 +215,30 @@ public:
         return mBitReservoir[mBytePos];
     }
 
+	uint32_t front9b(const uint8_t numBits) const
+	{
+		uint16_t tmp = bswap16(*(uint16_t*)&mBitReservoir[mBytePos]);
+		tmp &= (1 << (16 - mBitPos)) - 1;
+		tmp >>= 16 - mBitPos - numBits;
+		return tmp;
+	}
+
+	uint32_t front17b(const uint8_t numBits) const
+	{
+		uint32_t tmp = bswap32(*(uint32_t*)&mBitReservoir[mBytePos]) >> 8;
+		tmp &= (1 << (24 - mBitPos)) - 1;
+		tmp >>= 24 - mBitPos - numBits;
+		return tmp;
+	}
+
+	uint32_t front25b(const uint8_t numBits) const
+	{
+		uint32_t tmp = bswap32(*(uint32_t*)&mBitReservoir[mBytePos]);
+		tmp &= (1ULL << (32 - mBitPos)) - 1;
+		tmp >>= 32 - mBitPos - numBits;
+		return tmp;
+	}
+
     // write a bit to the current position (can overwrite)
     void writeBit(bool b)
     {
@@ -290,30 +314,6 @@ private:
     size_t mEndPos;
     size_t mBytePos;
     uint8_t mBitPos;
-
-    uint32_t front9b(const uint8_t numBits) const
-    {
-        uint16_t tmp=bswap16(*(uint16_t*)&mBitReservoir[mBytePos]);
-        tmp&=(1<<(16-mBitPos))-1;
-        tmp>>=16-mBitPos-numBits;
-        return tmp;
-    }
-
-    uint32_t front17b(const uint8_t numBits) const
-    {
-        uint32_t tmp=bswap32(*(uint32_t*)&mBitReservoir[mBytePos])>>8;
-        tmp&=(1<<(24-mBitPos))-1;
-        tmp>>=24-mBitPos-numBits;
-        return tmp;
-    }
-
-    uint32_t front25b(const uint8_t numBits) const
-    {
-        uint32_t tmp=bswap32(*(uint32_t*)&mBitReservoir[mBytePos]);
-        tmp&=(1<<(32-mBitPos))-1;
-        tmp>>=32-mBitPos-numBits;
-        return tmp;
-    }
 
     // adjust pointer when eof is reached, and return current window size
     size_t fixPosition()
