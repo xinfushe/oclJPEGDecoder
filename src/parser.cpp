@@ -18,10 +18,9 @@ bool read_soi(JPG_DATA &jpg, FILE * const strm)
 
 bool read_app0(JPG_DATA &jpg, FILE * const strm)
 {
-    uint8_t tag[2];
-    if (1!=fread(tag,sizeof(tag),1,strm) || tag[0]!=0xFF || tag[1]!=0xE0 || 1!=fread(&jpg.app0,sizeof(APP0),1,strm))
+    if (1!=fread(&jpg.app0,sizeof(APP0),1,strm))
     {
-        puts("[X] APP0 is missing.");
+        puts("[X] APP0 is incomplete.");
         return false;
     }
     // calculate the size of thumbnail image
@@ -270,29 +269,42 @@ bool load_jpg(const char *filePath)
     memset(&jpg,0,sizeof(jpg));
     uint8_t tag[2];
     uint16_t len;
+    bool foundAPP0=false;
     // read SOI
     if (!read_soi(jpg,fp))
     {
         puts("[X] read_soi() failed");
         goto error;
     }
-    // read APP0
-    if (!read_app0(jpg,fp))
-    {
-        puts("[X] read_app0() failed");
-        goto error;
-    }
-    printf("JPEG Version: %04x\n",bswap16(jpg.app0.ver));
-    printf("Thumbnail: %u * %u\n",jpg.app0.thumbnail_width,jpg.app0.thumbnail_height);
-    // read other APP tags
+    // read APP? tags
     tag[1]=0;
-    while (1==fread(tag,sizeof(tag),1,fp) && tag[1]>=0xE1 && tag[1]<=0xEF)
+    while (1==fread(tag,sizeof(tag),1,fp) && tag[1]>=0xE0 && tag[1]<=0xEF)
     {
-        printf("skipping APP%d\n",tag[1]-0xE0);
+        #ifdef PROCESS_APPN_HEADER
+        if (tag[1]==0xE0)
+        {
+            // APP0
+            if (foundAPP0)
+            {
+                puts("[!] multiple app0 found");
+            }
+            if (!read_app0(jpg,fp))
+            {
+                puts("[X] read_app0() failed");
+                goto error;
+            }
+            foundAPP0=true;
+            printf("JPEG Version: %04x\n",bswap16(jpg.app0.ver));
+            printf("Thumbnail: %u * %u\n",jpg.app0.thumbnail_width,jpg.app0.thumbnail_height);
+        }else
+        #endif
+        {
+            printf("skipping APP%d\n",tag[1]-0xE0);
+            uint16_t len;
+            fread(&len,sizeof(len),1,fp);
+            fseek(fp,bswap16(len)-sizeof(len),SEEK_CUR);
+        }
         tag[1]=0;
-        uint16_t len;
-        fread(&len,sizeof(len),1,fp);
-        fseek(fp,bswap16(len)-sizeof(len),SEEK_CUR);
     }
     do
     {
@@ -377,7 +389,7 @@ bool load_jpg(const char *filePath)
             goto error;
             break;
         case 0xD9: // EOI
-            puts("[ ] parsing finished.");
+            puts("[-] End of Image.");
         default:
             tag[1]=0;
             break;
