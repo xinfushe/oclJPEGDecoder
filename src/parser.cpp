@@ -283,9 +283,6 @@ bool load_jpg(const char *filePath)
         goto error;
     }
     printf("JPEG Version: %04x\n",bswap16(jpg.app0.ver));
-    /*
-    printf("Resolution: %u * %u\n",bswap(jpg.app0.res_x),bswap(jpg.app0.res_y));
-    */
     printf("Thumbnail: %u * %u\n",jpg.app0.thumbnail_width,jpg.app0.thumbnail_height);
     // read other APP tags
     tag[1]=0;

@@ -190,3 +190,33 @@ kernel void batch_idct_csc_444(global int * block, const int num_blocks, write_o
 
     }
 }
+
+kernel void batch_idct_csc_411(global int * block, const int num_blocks, write_only image2d_t image, const int num_hor_mcu)
+{
+    const int num_mcus=num_blocks/6;
+    for (int idx_mcu=get_global_id(0);idx_mcu<num_mcus;idx_mcu+=get_global_size(0))
+    {
+        global int* cur_block=block+((idx_mcu*6)<<6);
+        _idct8x8(cur_block);
+        _idct8x8(cur_block+64);
+        _idct8x8(cur_block+128);
+        _idct8x8(cur_block+192);
+        _idct8x8(cur_block+256);
+        _idct8x8(cur_block+320);
+
+		// assuming the mcu size is 16*16
+        int2 offset=(int2)((idx_mcu%num_hor_mcu)<<4,(idx_mcu/num_hor_mcu)<<4); // (x,y)
+		for (int y=0;y<16;y++)
+		{
+			for (int x=0;x<16;x++)
+			{
+				int Y=*(cur_block+64*(((y>>3)<<1)+(x>>3))+((y&7)<<3)+(x&7));
+				int U=*(cur_block+64*4+((y>>1)<<3)+(x>>1));
+				int V=*(cur_block+64*5+((y>>1)<<3)+(x>>1));
+				int4 rgba=(int4)(Y+1.402*V+128,Y-0.34414*U-0.71414*V+128,Y+1.772*U+128,0);
+				rgba=clamp(rgba,0,255);
+				write_imageui(image,offset+(int2)(x,y),convert_uint4(rgba));
+			}
+		}
+    }
+}

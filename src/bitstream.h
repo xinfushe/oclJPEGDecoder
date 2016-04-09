@@ -319,10 +319,15 @@ public:
         assert((mBytePos&3)==0 && (mBitPos==0) && (mBytePos+4<=mEndPos));
     }
 
-    void cacheReturn()
+    bool cacheEof()
     {
-        backBits(mBitsInCache);
-        mBitsInCache=0;
+        if (mBytePos>=mEndPos)
+        {
+            return ((mBytePos-mEndPos)<<3)>mBitsInCache;
+        }else
+        {
+            return false;
+        }
     }
 
     // numBits <= 32

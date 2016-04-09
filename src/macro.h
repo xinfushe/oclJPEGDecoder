@@ -114,7 +114,7 @@ bool inline out_of_map(int x, int y)
 enum ColorSpace
 {
     YUV444,
-    YUV420,
+    YUV411,
     Other
 };
 

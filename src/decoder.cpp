@@ -65,7 +65,7 @@ bool is_supported_file(const JPG_DATA &jpg)
         jpg.frame_info.channel_info[2].sampling_factor==0x11)
         return true;
 
-    puts("[X] sorry, currently only supports 8-bit YUV 4:2:0 or 4:4:4 format");
+    puts("[X] sorry, currently only supports 8-bit YUV 4:1:1 or 4:4:4 format");
     return false;
 }
 
@@ -169,7 +169,7 @@ bool decode_init(JPG_DATA &jpg)
     if (jpg.frame_info.channel_info[0].sampling_factor==0x22 && \
         jpg.frame_info.channel_info[1].sampling_factor==0x11 && \
         jpg.frame_info.channel_info[2].sampling_factor==0x11)
-        jpg.color_space=YUV420;
+        jpg.color_space=YUV411;
     else if (jpg.frame_info.channel_info[0].sampling_factor==0x11 && \
         jpg.frame_info.channel_info[1].sampling_factor==0x11 && \
         jpg.frame_info.channel_info[2].sampling_factor==0x11)
@@ -219,7 +219,7 @@ static bool decode_huffman_block(BitStream& strm, coef_t& last_dc, coef_t coef[6
     assert(hval<=25);
     value=read_number(strm,hval);
 
-    coef[count++]=last_dc+=value;
+    coef[count++]=(last_dc+=value);
 
     // read in 63 ac components
     while (count<64)
@@ -230,7 +230,7 @@ static bool decode_huffman_block(BitStream& strm, coef_t& last_dc, coef_t coef[6
         const int num_leading_0=(*hnode)>>4;
         const uint8_t len_val=(*hnode)&0xF;
 
-        count+=num_leading_0; // skip consecutive zeroes
+        count+=num_leading_0; // skip repeated zeroes
         assert(count+1<=64);
 
         if (len_val==0) // value is 0 in this case
@@ -254,10 +254,12 @@ bool decode_huffman_data(JPG_DATA &jpg, FILE * const fp)
     // create huffman trees
     HufTree* htree[32]={NULL};
     for (uint8_t i=0;i<32;i++)
+    {
         if (jpg.huffman_table[i]!=NULL)
         {
             htree[i]=new HufTree(jpg.huffman_table[i]->codeword,jpg.huffman_table[i]->value,jpg.huffman_table[i]->num_codeword);
         }
+    }
     // init
     BitStream strm(MIN_BUFFER_SIZE*4);
     const int& num_channels=jpg.scan_info.num_channels; // here we refer to scan_info because it's releated to huffman decoding
@@ -273,14 +275,10 @@ bool decode_huffman_data(JPG_DATA &jpg, FILE * const fp)
     {
         for (ch_idx=0;ch_idx<num_channels;ch_idx++)
         {
-            if ((mcu_idx>0 || ch_idx>0) && strm.eof())
+            if ((mcu_idx>0 || ch_idx>0) && strm.cacheEof())
             {
-                strm.cacheReturn();
-                if (strm.eof())
-                {
-                    printf("[X] data incomplete or buffer too small. (%d/%d mcu)\n",mcu_idx,jpg.mcu_count);
-                    return false;
-                }
+                printf("[X] data incomplete or buffer too small. (%d/%d mcu)\n",mcu_idx,jpg.mcu_count);
+                return false;
             }
             const coef_t * const qt=jpg.quantization_table[jpg.frame_info.channel_info[ch_idx].quant_tbl_id];
             for (blk_idx=0;blk_idx<jpg.blks_per_mcu[ch_idx];blk_idx++)

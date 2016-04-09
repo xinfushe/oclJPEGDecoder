@@ -216,9 +216,9 @@ bool clidct_build(ColorSpace colorspace)
         code_file="idct8x8.cl";
         kernel_name="batch_idct_csc_444";
         break;
-    case YUV420:
+    case YUV411:
         code_file="idct8x8.cl";
-        kernel_name="batch_idct_csc_420";
+        kernel_name="batch_idct_csc_411";
         break;
     case Other:
         code_file="idct8x8.cl";
