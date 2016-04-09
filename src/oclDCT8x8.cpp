@@ -1,5 +1,5 @@
 #include "stdafx.h"
-#include <cl\opencl.h>
+#include <CL/opencl.h>
 
 #include "macro.h"
 #include "idct.h"
@@ -58,7 +58,7 @@ int Initialize_OpenCL_IDCT()
 
                 clGetDeviceInfo(did, CL_DEVICE_NAME, sizeof(dname), dname, NULL);
                 printf("Device #%u: Name: %s\n", j+1, dname);
-                if (strstr(dname, "Quadro") || strstr(dname, "Tesla") || strstr(dname, "Geforce") || strstr(dname, "FirePro") || strstr(dname, "FireStream") || strstr(dname, "Capeverde"))
+                if (strstr(dname, "Quadro") || strstr(dname, "Tesla") || strstr(dname, "GeForce") || strstr(dname, "FirePro") || strstr(dname, "FireStream") || strstr(dname, "Capeverde"))
                 {
                     // choose high-performace gpu automatically
                     sel_device=did;
