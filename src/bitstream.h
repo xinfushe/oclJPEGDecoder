@@ -323,7 +323,7 @@ public:
     {
         if (mBytePos>=mEndPos)
         {
-            return ((mBytePos-mEndPos)<<3)>mBitsInCache;
+            return ((mBytePos-mEndPos)<<3)>(size_t)mBitsInCache;
         }else
         {
             return false;
@@ -357,6 +357,11 @@ public:
         result=cachedFrontBits(numBits);
         cachedSkipBits(numBits);
         return result;
+    }
+
+    void cacheAlignToByte()
+    {
+        cachedSkipBits(mBitsInCache&7);
     }
 
 private:

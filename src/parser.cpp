@@ -153,6 +153,20 @@ bool read_sos(JPG_DATA &jpg, FILE * const strm, size_t len)
     }
 }
 
+bool read_dri(JPG_DATA &jpg, FILE * const strm, size_t len)
+{
+    if (len!=sizeof(DRI) || 1!=fread(&jpg.dri_info,sizeof(DRI),1,strm))
+    {
+        puts("[X] DRI is corrupted.");
+        return false;
+    }
+    // fix endianess
+    jpg.dri_info.restart_interval=bswap16(jpg.dri_info.restart_interval);
+
+    printf("DRI Interval is %d\n",jpg.dri_info.restart_interval);
+    return true;
+}
+
 bool read_dht(JPG_DATA &jpg, FILE * const strm, size_t len)
 {
     uint8_t byte;
@@ -385,8 +399,11 @@ bool load_jpg(const char *filePath)
             puts("[ ] decoding completed.");
             break;
         case 0xDD: // DRI
-            puts("[X] DRI is not supported");
-            goto error;
+            if (!read_dri(jpg,fp,len))
+            {
+                puts("[X] read_dri() failed");
+                goto error;
+            }
             break;
         case 0xD9: // EOI
             puts("[-] End of Image.");

@@ -39,6 +39,11 @@ struct SOS
     uint8_t reserved[3]; // 0x00, 0x3F, 0x00
 };
 
+struct DRI
+{
+    uint16_t restart_interval;
+};
+
 #pragma pack()
 
 // Application-Defined Structres
@@ -59,6 +64,7 @@ struct JPG_DATA
     HUFFMAN_TABLE *huffman_table[32];
     void *thumbnail;
     SOS scan_info;
+    DRI dri_info;
 
     ColorSpace color_space;
 

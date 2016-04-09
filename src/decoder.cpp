@@ -133,6 +133,17 @@ check_again:
                             return false;
                     }
                     break;
+                case 0xD0:
+                case 0xD1:
+                case 0xD2:
+                case 0xD3:
+                case 0xD4:
+                case 0xD5:
+                case 0xD6:
+                case 0xD7: // RSTn: keep this mark but drop 0xFF
+                    strm.append(&buffer[left],next_ff);
+                    left=right;
+                    break;
                 default:
                     return false; // error
                 }
@@ -248,7 +259,7 @@ static bool decode_huffman_block(BitStream& strm, coef_t& last_dc, coef_t coef[6
     return count<=64;
 }
 
-bool decode_huffman_data(JPG_DATA &jpg, FILE * const fp)
+bool decode_huffman_data(const JPG_DATA &jpg, FILE * const fp)
 {
     const size_t MIN_BUFFER_SIZE=2048;
     // create huffman trees
@@ -265,6 +276,7 @@ bool decode_huffman_data(JPG_DATA &jpg, FILE * const fp)
     const int& num_channels=jpg.scan_info.num_channels; // here we refer to scan_info because it's releated to huffman decoding
     bool not_eof=true;
     int mcu_idx,ch_idx,blk_idx,overall_block_idx=0;
+    int dri_mcu_counter=0,dri_counter=0;
     // allocate memory for DC coeffs
     coef_t *dc_coef=new coef_t[num_channels];
     memset(dc_coef,0,sizeof(coef_t)*num_channels);
@@ -273,6 +285,26 @@ bool decode_huffman_data(JPG_DATA &jpg, FILE * const fp)
     // now we can start
     for (mcu_idx=0;mcu_idx<jpg.mcu_count;mcu_idx++)
     {
+        // handle DRI
+        if (jpg.dri_info.restart_interval>0 && dri_mcu_counter++==jpg.dri_info.restart_interval)
+        {
+            if (not_eof)
+            {
+                not_eof=read_more_data<MIN_BUFFER_SIZE>(strm,fp);
+            }
+            // read DRI mark
+            strm.cacheAlignToByte();
+            const uint8_t RST=strm.cachedNextBits(8);
+            if (RST!=(uint8_t)0xD0+(dri_counter&7))
+            {
+                printf("[X] expected RST%d (interval = %d; %d/%d mcu)",dri_counter&7,jpg.dri_info.restart_interval,mcu_idx,jpg.mcu_count);
+                return false;
+            }
+            dri_mcu_counter-=jpg.dri_info.restart_interval;
+            dri_counter++;
+            // reset DC coefficients
+            memset(dc_coef,0,sizeof(coef_t)*num_channels);
+        }
         for (ch_idx=0;ch_idx<num_channels;ch_idx++)
         {
             if ((mcu_idx>0 || ch_idx>0) && strm.cacheEof())
@@ -362,7 +394,7 @@ FILE* bmp_create(const char* path, const int width, const int height)
 	return bmp;
 }
 
-bool decode_mcu_data(JPG_DATA &jpg, FILE * const fp)
+bool decode_mcu_data(const JPG_DATA &jpg, FILE * const fp)
 {
     clock_t timestamp;
     char* image_data=NULL;
